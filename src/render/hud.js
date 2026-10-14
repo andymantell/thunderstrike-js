@@ -295,10 +295,7 @@ export class Hud {
   /** sub_1F72 */
   roundText(g, view) {
     if (g.roundOver) this.fonts.text8(view, 8, 5, this.ds.cstr(0x1000), this.textColour, g.roundOver);
-    if (g.lostTimer) {
-      // the original draws this with its "flashing" variant
-      if (g.frame & 1) this.fonts.text8(view, 8, 7, this.ds.cstr(0x0fdd), 0xe);
-    }
+    if (g.lostTimer) this.fonts.text8(view, 8, 7, this.ds.cstr(0x0fdd), this.textColour);
   }
 
   /** sub_21C4 / sub_21D0: installation and generator counters on the panel. */

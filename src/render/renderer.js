@@ -188,14 +188,13 @@ export class Renderer {
       this.dirty = false;
       gl.setRenderTarget(this.rt);
       gl.render(this.viewScene, this.camera);
-      gl.setRenderTarget(this.shown);
       const w = this.shown.width / 2, h = this.shown.height / 2;
-      gl.setScissorTest(true);
       for (let q = 0; q < 4; q++) {
         if (!(this.quarters & (1 << q))) continue;
         // bit0 top-left, bit1 top-right, bit2 bottom-left, bit3 bottom-right
         this.shown.scissor.set((q & 1) * w, (q & 2) ? 0 : h, w, h);
         this.shown.scissorTest = true;
+        gl.setRenderTarget(this.shown);
         gl.render(this.copyScene, this.orthoCam);
       }
       this.shown.scissorTest = false;

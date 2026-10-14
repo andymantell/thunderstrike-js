@@ -471,72 +471,79 @@ export class Flow {
 
   // ------------------------------------------------- craft selection
 
-  /** sub_2D24: choose one of five craft flying around the screen. */
+  /**
+   * sub_2D24: choose one of five craft. Each craft keeps its own home
+   * position (DS:0x4240); the chosen one swaps homes with the centre craft,
+   * flies forward to the front and is drawn in its normal colours while the
+   * others use their red variants. Space cycles, Enter accepts.
+   */
   *craftSelect() {
-    const app = this.app, d = this.display, ds = this.ds, g = this.arena, o = g.o;
+    const app = this.app, d = this.display, ds = this.ds, g = this.arena;
     d.clear(); d.blit();
     this.studio(); d.animFrame(this.data.anims.ANIM1V, 0);
     yield* this.talk(this.data.anims.ANIM1V, 0, 0xd, 0xbc19, 0xbc32, false);
     this.kb.clearLatches();
-    // five display slots from DS:0x4240
-    const slots = [];
+    const craft = [];
     for (let i = 0; i < 5; i++) {
       const b = 0x4240 + i * 12;
-      slots.push({ hx: ds.s16(b), hy: ds.s16(b + 2), x: ds.s16(b), y: ds.s16(b + 2), z: ds.s16(b + 4), model: ds.u16(b + 6), vx: ds.s16(b + 8), vy: ds.s16(b + 10), yaw: 0, craft: i });
+      const x = ds.s16(b), y = ds.s16(b + 2);
+      craft.push({ hx: x, hy: y, x, y, z: ds.s16(b + 4), model: ds.u16(b + 6), vx: ds.s16(b + 8), vy: ds.s16(b + 10), yaw: 0 });
     }
     let sel = this.craftSlot;
-    const swap = (a, b) => { const t = slots[a].craft; slots[a].craft = slots[b].craft; slots[b].craft = t; };
-    // the chosen craft takes the centre slot and its normal colours
-    swap(sel, 2);
-    const modelOf = (s) => 0x20 + slots[s].craft * 4 + (s === 2 ? 0 : 2);
+    const swapHome = (a, b) => {
+      for (const k of ['hx', 'hy', 'x', 'y', 'z', 'vx', 'vy']) { const t = craft[a][k]; craft[a][k] = craft[b][k]; craft[b][k] = t; }
+    };
+    swapHome(sel, 2);
+    craft[sel].model -= 2;
     let typing = 1;
+    const select = (next) => {
+      craft[sel].model += 2;
+      for (const k of ['hx', 'hy', 'vx', 'vy']) craft[sel][k] = craft[next][k];
+      app.speaker.request(0x0f05);
+      typing = 1;
+      sel = next;
+      craft[sel].model -= 2;
+    };
+    const o = g.o, slot = 23;
     for (;;) {
-      // 2e8c: animate and draw
-      for (let s = 0; s < 5; s++) {
-        const sl = slots[s];
-        sl.yaw = (sl.yaw + 5) & 0xff;
-        if (s !== 2) {
-          sl.x += sl.vx; sl.y += sl.vy; sl.z += 0xf;
-          if (sl.z >= 0) { sl.x = sl.hx; sl.y = sl.hy; sl.z = 0; }
+      // sub_2E8C
+      for (let i = 0; i < 5; i++) {
+        const c = craft[i];
+        c.yaw = (c.yaw + 5) & 0xffff;
+        if (i !== sel) {
+          c.x += c.vx; c.y += c.vy;
+          const z = s16(c.z + 0xf);
+          if (z < 0) c.z = z; else { c.x = c.hx; c.y = c.hy; c.z = 0; }
         } else {
-          sl.x -= sl.vx; sl.y -= sl.vy; sl.z -= 0xa;
-          if (u16(sl.z) <= 0xff9c && sl.z > -100) { /* still moving */ } else { sl.x = 0; sl.y = -0x46; sl.z = -100; }
+          c.x -= c.vx; c.y -= c.vy;
+          const z = u16(c.z - 0xa);
+          if (z > 0xff9c) c.z = s16(z); else { c.x = 0; c.y = -0x46; c.z = -100; }
         }
       }
       const prims = [];
-      const draw = (s) => {
-        const sl = slots[s];
-        o.vxv[23] = u16(sl.x); o.vyv[23] = u16(sl.y); o.vzv[23] = u16(sl.z);
-        o.model[23] = modelOf(s); o.yaw[23] = (u8(-sl.yaw)) & 0xff; o.pitch[23] = 0; o.roll[23] = 0;
-        this.scene.object({ o, camYaw: 0 }, 23, this.scene.light(0), prims);
+      const cam = (g.camYaw >> 8) & 0xff;
+      const draw = (i) => {
+        const c = craft[i];
+        o.vxv[slot] = u16(c.x); o.vyv[slot] = u16(c.y); o.vzv[slot] = u16(c.z);
+        o.model[slot] = c.model; o.yaw[slot] = c.yaw; o.pitch[slot] = 0; o.roll[slot] = 0;
+        this.scene.object(g, slot, this.scene.light(cam), prims);
       };
-      for (let s = 0; s < 5; s++) if (s !== 2) draw(s);
-      draw(2);
-      o.type[23] = 0;
+      for (let i = 0; i < 5; i++) if (i !== sel) draw(i);
+      draw(sel);
       app.renderer.setPrimitives(prims, 0, 'black');
       d.clear();
-      const name = ds.cstr(ds.u16(0x4288 + slots[2].craft * 2));
       if (typing < 0x64) typing++;
-      if (!d.print(4, 1, 1, name, typing)) app.speaker.request(0x0032);
+      if (!d.print(4, 1, 1, ds.cstr(ds.u16(0x4288 + sel * 2)), typing)) app.speaker.request(0x0032);
       app.speaker.flush();
-      this.craftRatings(slots[2].craft);
+      this.craftRatings(sel);
       app.showOverlay3D(d.work);
-      yield 3;
-      // input: space cycles, enter accepts
-      if (this.kb.take(SC_SPACE)) {
-        swap(2, 2);
-        const cur = slots[2].craft;
-        const next = (cur + 1) % 5;
-        const s = slots.findIndex((x) => x.craft === next);
-        swap(s, 2);
-        slots[2].z = slots[s].z;
-        this.app.speaker.request(0x0f05);
-        typing = 1;
-      }
-      if (this.kb.take(SC_ENTER) || this.kb.take(SC_ESC)) break;
+      yield 2;
+      if (this.kb.take(SC_SPACE)) select((sel + 1) % 5);
+      if (this.kb.take(SC_ENTER)) break;
     }
-    this.craftSlot = slots[2].craft;
-    g.selectCraft(this.craftSlot);
+    this.craftSlot = sel;
+    g.selectCraft(sel);
+    d.clear(); d.blit();
     app.renderer.setPrimitives([], 0, 'sky');
   }
 
