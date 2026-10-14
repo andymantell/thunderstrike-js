@@ -824,7 +824,15 @@ export class Flow {
 
 /** sub_138D: hit, defence and video rates in tenths of a percent. */
 export function computeRates(g, ds) {
-  const rate = (a, b) => (b ? Math.floor((a * 1000) / b) : 0);
+  // sub_1426: shift both 32-bit values left until either high word has its top bit set,
+  // then divide the high words: a*1000/b with the original's precision
+  const rate = (a, b) => {
+    a >>>= 0; b >>>= 0;
+    if (!b) return 0;
+    while (!(((a >>> 16) | (b >>> 16)) & 0x8000)) { a = (a * 2) >>> 0; b = (b * 2) >>> 0; }
+    const bh = b >>> 16;
+    return bh ? Math.floor(((a >>> 16) * 1000) / bh) & 0xffff : 0;
+  };
   const s = g.stats;
   const r = s.round, a = s.arena, gm = s.game;
   g.rates = {

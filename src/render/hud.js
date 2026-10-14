@@ -234,7 +234,7 @@ export class Hud {
       else g.msg.post(0x02, 0xdd1, 1);
       return;
     }
-    if (g.turbos && (g.input.buttons & 1) && (g.frame & 1)) {
+    if (g.turbos && (g.input.buttons & 1)) {
       this.ds.w8(0xdfc, 0x30 + g.turbos);
       g.msg.post(0x02, 0xdef, 0xa);
     }
