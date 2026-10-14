@@ -1,0 +1,14 @@
+node_modules/
+dist/
+# Original game data and anything converted from it must never be committed.
+/game
+converted/
+*.EXE
+*.exe
+*.IGR
+*.igr
+*.DAT
+*.dat
+*.M
+*.BIN
+*.zip

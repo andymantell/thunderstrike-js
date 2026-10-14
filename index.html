@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Thunderstrike JS</title>
+  <style>
+    :root { color-scheme: dark; --bg: #000; --fg: #c8c8d0; --accent: #58a6ff; --panel: #14161c; --border: #2a2f3a; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, sans-serif; }
+    #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+    #screen { image-rendering: pixelated; image-rendering: crisp-edges; background: #000; outline: none; }
+    #loader[hidden] { display: none; }
+    #loader { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; }
+    #loader .card { max-width: 560px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 24px; }
+    #loader h1 { margin: 0 0 8px; font-size: 20px; color: #fff; }
+    #drop { margin-top: 16px; border: 2px dashed var(--border); border-radius: 8px; padding: 24px; text-align: center; cursor: pointer; }
+    #drop.over { border-color: var(--accent); }
+    #error { color: #ff7b72; margin-top: 12px; white-space: pre-wrap; }
+    .hint { color: #8b949e; font-size: 12px; margin-top: 12px; }
+    button.link { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0; font: inherit; }
+    #help { position: fixed; bottom: 6px; left: 0; right: 0; text-align: center; color: #555; font-size: 12px; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <div id="stage"><canvas id="screen" tabindex="0" width="640" height="480"></canvas></div>
+  <div id="loader" hidden>
+    <div class="card">
+      <h1>Thunderstrike JS</h1>
+      <p>A reimplementation of the 1990 DOS game <em>Thunderstrike</em> by Millennium. It contains no game data:
+        to play, supply your own copy of the original DOS release (the folder containing <code>TS.EXE</code>, or a .zip of it).</p>
+      <div id="drop">Drop the game .zip or folder here, or click to choose a .zip<input id="file" type="file" accept=".zip" hidden></div>
+      <div id="error"></div>
+      <p class="hint">Files are read locally in your browser and remembered on this device only.</p>
+    </div>
+  </div>
+  <div id="help"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

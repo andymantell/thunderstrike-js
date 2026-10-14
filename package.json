@@ -1,0 +1,21 @@
+{
+  "name": "thunderstrike-js",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A three.js reimplementation of the 1990 DOS game Thunderstrike. Requires your own copy of the original game data.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test test/*.test.js",
+    "convert": "node tools/convert.mjs"
+  },
+  "dependencies": {
+    "fflate": "0.8.2",
+    "three": "0.169.0"
+  },
+  "devDependencies": {
+    "vite": "5.4.10"
+  }
+}
