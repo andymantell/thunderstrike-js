@@ -14,6 +14,7 @@ import { T } from './game/objects.js';
 import { SceneBuilder } from './render/scene.js';
 import { Hud, Fonts } from './render/hud.js';
 import { Display } from './ui/display.js';
+import { runAll as aiRun } from './game/ai.js';
 import { s16, u8, u16 } from './core/int.js';
 
 const SC_ESC = 0x01, SC_F4 = 0x3e, SC_F10 = 0x44, SC_SPACE = 0x39, SC_ENTER = 0x1c, SC_Q = 0x10;
@@ -803,7 +804,7 @@ export class Flow {
       Object.assign(g.input, { x: x & 0xff, y: 0x80, buttons: 1, fireLatch: 0, thrustLatch: 0 });
       g.updatePlayer(); g.updateCameraYaw(); g.updateCameraHeight();
       g.o.roll[0] = (g.o.roll[0] & 0xff00) | (((-g.p.turn) << 2 >> 8) & 0xff);
-      g.moveObjects(); g.sampleGround();
+      aiRun(g); g.moveObjects(); g.sampleGround();
       this.renderFrame();
       // 934d: the picture is shown in flickering quarters like a bad TV signal
       if (--holdQ < 0) {
