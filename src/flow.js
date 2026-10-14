@@ -310,7 +310,7 @@ export class Flow {
     let idle = 0;
     this.menuPicture(items);
     for (;;) {
-      const si = yield* this.menuSelect(() => ++idle);
+      const si = yield* this.menuSelect(() => ++idle > 0x258);
       if (si === 0) {
         if (yield* this.confirm(0xbba4)) { this.app.quit(); }
         this.menuPicture(items); idle = 0;
@@ -319,7 +319,7 @@ export class Flow {
       if (si === 1) { this.sfx(0xf); yield* this.optionsMenu(); this.menuPicture(items); idle = 0; continue; }
       if (si === 3) { this.sfx(0xf); yield* this.craftSelect(); this.menuPicture(items); idle = 0; continue; }
       if (si === 2 || si === 4) return;
-      if (idle * 5 > 0x258) { yield* this.attractDemo(); this.loadPanel(); this.menuPicture(items); idle = 0; }
+      if (si < 0) { yield* this.attractDemo(); this.loadPanel(); this.menuPicture(items); idle = 0; }
     }
   }
 
@@ -331,7 +331,6 @@ export class Flow {
     let result = -1;
     this.kb.clearLatches();
     yield () => {
-      onIdle?.();
       const c = u8(-this.inkey());
       if (c === 2) result = 0;
       else if (c >= 0xb && c <= 0xd) result = c - 0xa;
@@ -342,7 +341,7 @@ export class Flow {
         const x = m.screenX, y = m.screenY;
         if (y >= 0x61 && y <= 0x76 && (x & 0x3f) >= 2 && (x & 0x3f) <= 0x3d) result = x >> 6;
       }
-      return result >= 0 || (onIdle && false);
+      return result >= 0 || (onIdle ? onIdle() : false);
     };
     yield () => this.inkey() === 0;
     return result;
