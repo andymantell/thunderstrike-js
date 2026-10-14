@@ -8,7 +8,7 @@
  *   DS:0x7A83  16x16 two-plane digits (cockpit counters)
  *   DS:0x7D03  16x16 two-plane font
  */
-import { s16, u8 } from '../core/int.js';
+import { s16, s8, u8 } from '../core/int.js';
 
 export class Canvas8 {
   constructor(w, h, data) { this.w = w; this.h = h; this.d = data ?? new Uint8Array(w * h); }
@@ -209,26 +209,22 @@ export class Hud {
     view.vline(0xec, 10, 0x19, 0xf);
   }
 
-  /** sub_633B: track junction arrows (left / centre / right). */
+  /** sub_633B: track junction arrows (left chevron, centre box, right chevron). */
   railArrows(g, view) {
     const bl = g.turnIndicator & 0xff;
-    const x0 = 0xda, y0 = 0x14;
-    const put = (dx, dy, c) => view.plot(x0 + dx, y0 + dy, c);
+    const put = (x, y, c) => view.plot(x, y, c);
+    // left: chevron pointing left from (0xDA,0x14) plus a 9 pixel post
     let c = (bl & 0x80) ? 0xf : 7;
-    for (let i = 0; i < 9; i++) put(-1 + i, i, 0);
-    [[0xff, 1], [0x1fe, 2], [0x2fd, 3], [0x3fc, 4], [0x4fd, 5], [0x5fe, 6], [0x6ff, 7]].forEach(([off]) => {
-      put(off % 256, Math.floor(off / 256), c);
-    });
-    for (let i = 0; i < 9; i++) put(0, i, c);
+    [[-1, 1], [-2, 2], [-3, 3], [-4, 4], [-3, 5], [-2, 6], [-1, 7]].forEach(([dx, dy]) => put(0xda + dx, 0x14 + dy, c));
+    for (let i = 0; i < 9; i++) put(0xda, 0x14 + i, c);
+    // centre: an 8x9 box
     c = bl === 0 ? 0xf : 7;
-    for (let i = 0; i < 8; i++) put(2 + i, 0, c);
-    for (let i = 0; i < 7; i++) { put(2, 1 + i, c); put(9, 1 + i, c); }
-    for (let i = 0; i < 8; i++) put(2 + i, 8, c);
-    c = (bl !== 0 && !(bl & 0x80)) ? 0xf : 7;
-    [[0x101, 1], [0x202, 2], [0x303, 3], [0x404, 4], [0x503, 5], [0x602, 6], [0x701, 7]].forEach(([off]) => {
-      put(0xb + (off % 256), Math.floor(off / 256), c);
-    });
-    for (let i = 0; i < 9; i++) put(0xb, i, c);
+    for (let i = 0; i < 8; i++) { put(0xdc + i, 0x14, c); put(0xdc + i, 0x1c, c); }
+    for (let i = 1; i < 8; i++) { put(0xdc, 0x14 + i, c); put(0xe3, 0x14 + i, c); }
+    // right: chevron pointing right from (0xE5,0x14) plus a post
+    c = (s8(bl) > 0) ? 0xf : 7;
+    [[1, 1], [2, 2], [3, 3], [4, 4], [3, 5], [2, 6], [1, 7]].forEach(([dx, dy]) => put(0xe5 + dx, 0x14 + dy, c));
+    for (let i = 0; i < 9; i++) put(0xe5, 0x14 + i, c);
   }
 
   /** sub_11A8 */
