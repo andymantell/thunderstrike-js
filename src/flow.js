@@ -169,7 +169,7 @@ export class Flow {
       yield () => app.frameTicks >= 5;
       app.frameTicks = 0;
       if (this.kb.take(SC_F4) && !g.roundOver) yield* this.statsOverlay();   // 11ee
-      this.checkCheat();                                                   // 2927
+      if (this.checkCheat()) { g.nextRound(); yield* this.roundIntro(); this.applyArenaLook(); app.frameTicks = 0; continue; } // 2927 -> 29a0
       app.controls.read(g.input);
       g.input.refuel = this.kb.held(0x43);
       const ev = g.step();
@@ -216,24 +216,30 @@ export class Flow {
     this.hud.counters(g, app.screen);
   }
 
-  /** sub_2927: the developers' cheat, a scancode sequence stored at DS:0x4223. */
+  /**
+   * sub_2927: the developers' cheat, a scancode sequence stored at
+   * DS:0x4223. Reaching an entry of 0x19 skips to the next round; reaching
+   * the terminating zero maxes out the craft and power-ups. Returns true
+   * when the round was skipped.
+   */
   checkCheat() {
-    const sc = this.kb.last;
-    if (!sc || sc === this.cheatSeen) return;
-    this.cheatSeen = sc;
-    let i = this.cheatIndex ?? 0;
-    const want = this.ds.u8(0x4223 + i);
-    if (sc === want) {
-      i++;
-      if (this.ds.u8(0x4223 + i) === 0) {
+    const ds = this.ds, sc = this.kb.last;
+    let si = this.cheatIndex ?? 0;
+    if (sc === ds.u8(0x4223 + si)) {
+      si++;
+      this.cheatIndex = si;
+      const next = ds.u8(0x4223 + si);
+      if (next === 0) {
         const g = this.arena;
         g.craft.turn = 0x95; g.craft.speed = 0xc7; g.craft.accel = 0x63;
         g.twinShots = 0x3e7; g.powerShots = 0x3e7; g.turbos = 0x3e7;
         g.deriveCraft();
-        i = 0;
-      } else if (this.ds.u8(0x4223 + i) === 0x19) { this.arena.roundOver = 0; i = 0; }
-    } else if (sc !== this.ds.u8(0x4223 + i - 1)) i = 0;
-    this.cheatIndex = i;
+      } else if (next === 0x19) return true;
+      return false;
+    }
+    if (si && sc === ds.u8(0x4223 + si - 1)) return false;
+    this.cheatIndex = 0;
+    return false;
   }
 
   /** sub_11EE: F4 shows the stats over the arena overview until a key is pressed. */
