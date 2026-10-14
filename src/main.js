@@ -16,6 +16,7 @@ async function start(entries, remember) {
   loader.hidden = true;
   const app = new App(document.getElementById('screen'), data);
   window.thunderstrike = app;   // handy for debugging from the console
+  setupSettings(app);
   app.run();
 }
 
@@ -90,3 +91,26 @@ async function devFiles() {
   }
   showLoader();
 })();
+
+function setupSettings(app) {
+  const gear = document.getElementById('gear'), panel = document.getElementById('settings');
+  const controls = document.getElementById('opt-controls'), scale = document.getElementById('opt-scale');
+  const volume = document.getElementById('opt-volume');
+  const saved = JSON.parse(localStorage.getItem('thunderstrike-settings') || '{}');
+  const apply = () => {
+    app.controls.mode = controls.value;
+    app.renderer.setScale(+scale.value);
+    app.setVolume(+volume.value / 100);
+    localStorage.setItem('thunderstrike-settings', JSON.stringify({ controls: controls.value, scale: scale.value, volume: volume.value }));
+  };
+  if (saved.controls) controls.value = saved.controls;
+  if (saved.scale) scale.value = saved.scale;
+  if (saved.volume) volume.value = saved.volume;
+  apply();
+  for (const el of [controls, scale, volume]) el.addEventListener('change', apply);
+  gear.hidden = false;
+  gear.addEventListener('click', () => { panel.hidden = !panel.hidden; });
+  document.getElementById('opt-forget').addEventListener('click', async () => { await forgetArchive(); location.reload(); });
+  // keep keyboard focus on the game after using the panel
+  panel.addEventListener('change', () => document.getElementById('screen').focus());
+}

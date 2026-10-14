@@ -33,7 +33,8 @@ export class Renderer {
     this.makeViewTarget();
     this.makeViewScene();
     this.makeComposite();
-    this.showView = false;
+    this.mode = 0;          // 0 screen only, 1 3D view + HUD layer, 2 front-end buffer, 3 3D + buffer
+    this.quarters = 0xf;    // attract mode shows only some quarters of the view each frame
   }
 
   setScale(scale) {
@@ -41,14 +42,17 @@ export class Renderer {
     this.scale = scale;
     this.rt.dispose();
     this.makeViewTarget();
-    this.compositeMat.uniforms.view.value = this.rt.texture;
+    this.compositeMat.uniforms.view.value = this.shown.texture;
+    this.copyMat.uniforms.src.value = this.rt.texture;
   }
 
   makeViewTarget() {
-    this.rt = new THREE.WebGLRenderTarget(VIEW_W * this.scale, VIEW_H * this.scale, {
+    const opts = {
       minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false,
       format: THREE.RGBAFormat, type: THREE.UnsignedByteType,
-    });
+    };
+    this.rt = new THREE.WebGLRenderTarget(VIEW_W * this.scale, VIEW_H * this.scale, opts);
+    this.shown = new THREE.WebGLRenderTarget(VIEW_W * this.scale, VIEW_H * this.scale, opts);
   }
 
   makeViewScene() {
@@ -61,11 +65,11 @@ export class Renderer {
 
     // sky rows 0..63 use colours 0x80+row/2, rows 64..127 the arena ground colour
     this.bgMat = new THREE.ShaderMaterial({
-      uniforms: { ground: { value: 0 } },
+      uniforms: { ground: { value: 0 }, sky: { value: 1 } },
       vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
-      fragmentShader: `uniform float ground; varying vec2 vUv;
+      fragmentShader: `uniform float ground, sky; varying vec2 vUv;
         void main(){ float row = floor((1.0 - vUv.y) * 128.0);
-          float ci = row < 64.0 ? 128.0 + floor(row / 2.0) : ground;
+          float ci = sky < 0.5 ? 0.0 : row < 64.0 ? 128.0 + floor(row / 2.0) : ground;
           gl_FragColor = vec4(ci / 255.0, 0.0, 0.0, 1.0); }`,
       depthTest: false, depthWrite: false,
     });
@@ -97,20 +101,21 @@ export class Renderer {
   makeComposite() {
     this.compositeMat = new THREE.ShaderMaterial({
       uniforms: {
-        screen: { value: this.screenTex }, view: { value: this.rt.texture },
+        screen: { value: this.screenTex }, view: { value: this.shown.texture },
         overlay: { value: this.overlayTex }, palette: { value: this.palette },
-        showView: { value: 0 },
+        mode: { value: 0 },
       },
       vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
-      fragmentShader: `uniform sampler2D screen, view, overlay, palette; uniform float showView; varying vec2 vUv;
+      fragmentShader: `uniform sampler2D screen, view, overlay, palette; uniform float mode; varying vec2 vUv;
         vec4 pal(float i){ return texture2D(palette, vec2((floor(i + 0.5) + 0.5) / 256.0, 0.5)); }
         void main(){
           vec2 p = vec2(vUv.x * 320.0, (1.0 - vUv.y) * 200.0);
           float ci = texture2D(screen, vec2(vUv.x, 1.0 - vUv.y)).r * 255.0;
-          if (showView > 0.5 && p.x >= 32.0 && p.x < 288.0 && p.y >= 16.0 && p.y < 144.0) {
+          if (mode > 0.5 && p.x >= 32.0 && p.x < 288.0 && p.y >= 16.0 && p.y < 144.0) {
             vec2 q = vec2((p.x - 32.0) / 256.0, (p.y - 16.0) / 128.0);
             float o = texture2D(overlay, q).r * 255.0;
-            ci = o > 0.5 ? o : texture2D(view, vec2(q.x, 1.0 - q.y)).r * 255.0;
+            float v = texture2D(view, vec2(q.x, 1.0 - q.y)).r * 255.0;
+            ci = (mode > 1.5 && mode < 2.5) ? o : (o > 0.5 ? o : v);
           }
           gl_FragColor = pal(ci);
         }`,
@@ -121,6 +126,17 @@ export class Renderer {
     quad.frustumCulled = false;
     this.compositeScene.add(quad);
     this.orthoCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    // copies quarters of the freshly rendered view into the displayed view
+    this.copyMat = new THREE.ShaderMaterial({
+      uniforms: { src: { value: this.rt.texture } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+      fragmentShader: 'uniform sampler2D src; varying vec2 vUv; void main(){ gl_FragColor = texture2D(src, vUv); }',
+      depthTest: false, depthWrite: false,
+    });
+    this.copyScene = new THREE.Scene();
+    const cq = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.copyMat);
+    cq.frustumCulled = false;
+    this.copyScene.add(cq);
   }
 
   /** dac: Uint8Array(768) of 6-bit VGA values */
@@ -135,8 +151,10 @@ export class Renderer {
   }
 
   /** Fill the dynamic mesh from SceneBuilder primitives (painter's order). */
-  setPrimitives(prims, groundColour) {
+  setPrimitives(prims, groundColour, background = 'sky') {
     this.bgMat.uniforms.ground.value = groundColour;
+    this.bgMat.uniforms.sky.value = background === 'sky' ? 1 : 0;
+    this.dirty = true;
     let n = 0;
     const put = (x, y, z, c, dx = 0, dy = 0, d = 0) => {
       if (n >= MAX_VERTS) return;
@@ -166,13 +184,26 @@ export class Renderer {
   /** Draw a frame. */
   present() {
     const gl = this.gl;
-    if (this.showView) {
+    if ((this.mode === 1 || this.mode === 3) && this.dirty) {
+      this.dirty = false;
       gl.setRenderTarget(this.rt);
       gl.render(this.viewScene, this.camera);
+      gl.setRenderTarget(this.shown);
+      const w = this.shown.width / 2, h = this.shown.height / 2;
+      gl.setScissorTest(true);
+      for (let q = 0; q < 4; q++) {
+        if (!(this.quarters & (1 << q))) continue;
+        // bit0 top-left, bit1 top-right, bit2 bottom-left, bit3 bottom-right
+        this.shown.scissor.set((q & 1) * w, (q & 2) ? 0 : h, w, h);
+        this.shown.scissorTest = true;
+        gl.render(this.copyScene, this.orthoCam);
+      }
+      this.shown.scissorTest = false;
+      gl.setScissorTest(false);
     }
     this.screenTex.needsUpdate = true;
     this.overlayTex.needsUpdate = true;
-    this.compositeMat.uniforms.showView.value = this.showView ? 1 : 0;
+    this.compositeMat.uniforms.mode.value = this.mode;
     gl.setRenderTarget(null);
     gl.render(this.compositeScene, this.orthoCam);
   }

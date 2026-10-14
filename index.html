@@ -18,6 +18,12 @@
     #error { color: #ff7b72; margin-top: 12px; white-space: pre-wrap; }
     .hint { color: #8b949e; font-size: 12px; margin-top: 12px; }
     button.link { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0; font: inherit; }
+    #gear { position: fixed; top: 8px; right: 8px; background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; cursor: pointer; opacity: .6; }
+    #gear:hover { opacity: 1; }
+    #settings { position: fixed; top: 44px; right: 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; width: 260px; }
+    #settings[hidden] { display: none; }
+    #settings label { display: block; margin: 8px 0; }
+    #settings select, #settings input { width: 100%; margin-top: 4px; }
     #help { position: fixed; bottom: 6px; left: 0; right: 0; text-align: center; color: #555; font-size: 12px; pointer-events: none; }
   </style>
 </head>
@@ -32,6 +38,17 @@
       <div id="error"></div>
       <p class="hint">Files are read locally in your browser and remembered on this device only.</p>
     </div>
+  </div>
+  <button id="gear" hidden title="Settings">Settings</button>
+  <div id="settings" hidden>
+    <label>Controls
+      <select id="opt-controls"><option value="keyboard">Keyboard</option><option value="mouse">Mouse</option></select></label>
+    <label>3D resolution
+      <select id="opt-scale"><option value="1">256x128 (original)</option><option value="2">2x</option><option value="4">4x</option></select></label>
+    <label>Volume <input id="opt-volume" type="range" min="0" max="100" value="50"></label>
+    <p class="hint">Default keys: Z/X turn, L/, climb and dive, P thrust (tap twice for turbo), Space fire,
+      F1 options, F2 play, F3 craft, F4 stats, F10 pause, Esc menu.</p>
+    <button id="opt-forget" class="link">Forget my game files</button>
   </div>
   <div id="help"></div>
   <script type="module" src="/src/main.js"></script>

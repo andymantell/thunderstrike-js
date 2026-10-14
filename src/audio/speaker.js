@@ -78,6 +78,8 @@ export class Speaker {
   }
 
   play(id) { this.r = this.record(id & 0x1f); this.active = true; }
+  /** CS:2700: stop the current effect if its id is 6 or less (engine noises). */
+  stopIfBelow(n) { if (this.active && ((this.current >> 8) & 0xff) <= n) this.stop(); }
   stop() { this.active = false; this.silence(); }
   busy() { return this.active; }
 

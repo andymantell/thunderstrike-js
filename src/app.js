@@ -8,6 +8,7 @@ import { Canvas8 } from './render/hud.js';
 import { Keyboard } from './input/keyboard.js';
 import { Controls } from './input/controls.js';
 import { Speaker } from './audio/speaker.js';
+import { Music } from './audio/music.js';
 import { Flow } from './flow.js';
 
 const TICK_MS = 1000 / 50;   // PIT programmed with divisor 0x5D37
@@ -28,6 +29,7 @@ export class App {
     this.keyboard = new Keyboard(window);
     this.controls = new Controls(this.keyboard, data.exe.ds);
     this.speaker = new Speaker(data.mz);
+    this.music = new Music(data.mz);
     this.dac = new Uint8Array(768);
     this.dac.set(VGA_DEFAULT_16);
     this.ticks = 0;            // timer interrupts since start
@@ -35,7 +37,7 @@ export class App {
     this.waitTicks = 0;        // cs:81E6
     this.flow = new Flow(this);
     window.addEventListener('resize', () => this.fit());
-    const wake = () => this.speaker.resume();
+    const wake = () => { this.speaker.resume(); if (this.speaker.ctx) this.music.init(this.speaker.ctx); };
     window.addEventListener('keydown', wake);
     window.addEventListener('pointerdown', wake);
     this.setupMouse();
@@ -46,6 +48,9 @@ export class App {
     const m = this.controls.mouse;
     this.canvas.addEventListener('pointerdown', (e) => {
       if (this.controls.mode === 'mouse' && document.pointerLockElement !== this.canvas) this.canvas.requestPointerLock?.();
+      const r = this.canvas.getBoundingClientRect();
+      const sx = ((e.clientX - r.left) / r.width) * 320, sy = ((e.clientY - r.top) / r.height) * 200;
+      m.screenX = Math.floor(sx - 32); m.screenY = Math.floor(sy - 16); m.clicked = true;
       if (e.button === 0) { m.buttons |= 1; m.pressed[1] = 1; }
       if (e.button === 2) { m.buttons |= 2; m.pressed[0] = 1; }
     });
@@ -71,8 +76,26 @@ export class App {
     this.renderer.resize(cw, ch);
   }
 
+  setVolume(v) {
+    this.volume = v;
+    this.speaker.volume = 0.16 * v;
+    this.music.setVolume?.(v);
+  }
+
+  /** Screen only (title picture). */
+  showScreen() { this.renderer.mode = 0; }
+  /** 3D view with the HUD layer (arena). */
+  show3D() { this.renderer.mode = 1; }
+  /** Front-end buffer blitted into the cockpit window (CS:60A4). */
+  showBuffer(buf) { this.view.d.set(buf.d); this.renderer.mode = 2; }
+  /** 3D models under a front-end buffer whose colour 0 is transparent (craft selection). */
+  showOverlay3D(buf) { this.view.d.set(buf.d); this.renderer.mode = 3; }
+  /** "Return to DOS": there is no DOS, so go back to the start. */
+  quit() { location.reload(); }
+
   setColours(first, rgb) { this.dac.set(rgb.subarray(0, Math.min(rgb.length, 768 - first * 3)), first * 3); this.paletteDirty = true; }
-  blackPalette() { this.dac.fill(0); this.paletteDirty = true; }
+  /** Mode 13h reset: the BIOS default palette for colours 0..15, the rest black. */
+  resetPalette() { this.dac.fill(0); this.dac.set(VGA_DEFAULT_16); this.paletteDirty = true; }
 
   run() {
     this.start = performance.now();
