@@ -165,7 +165,8 @@ function defender(g, s) {
 /** 0x3738: something falling towards the player (type 0x30). */
 function falling(g, s) {
   const o = g.o;
-  const a = g.tables.atan2(s16(g.p.x - o.x[s]), s16(g.p.z - o.z[s]));
+  // sub_80A1 with DI=0: towards object slot 0 (the craft, or its wreck while exploding)
+  const a = g.tables.atan2(s16(o.x[0] - o.x[s]), s16(o.z[0] - o.z[s]));
   velocityAlong(g, s, a, 0x4b0);
   o.vy[s] = u16(o.vy[s] - o.link[s]);
   if (s16(o.y[s]) < 0xc8) { o.vy[s] = 0; o.type[s] = 0; }
@@ -220,7 +221,7 @@ function glider(g, s) {
   const yaw = u8(lo(o.yaw[s]) + (s8(-bank) >> 2));
   o.yaw[s] = setLo(o.yaw[s], yaw);
   velocityAlong(g, s, yaw, 0x258);
-  const angle = g.tables.atan2(s16(g.p.x - o.x[s]), s16(g.p.z - o.z[s]));
+  const angle = g.tables.atan2(s16(o.x[0] - o.x[s]), s16(o.z[0] - o.z[s]));   // 388C: slot 0
   if (facing(angle, yaw, 0x14)) {
     if (g.terrain.bunkersLeft === 0) o.t2[s] = setHi(o.t2[s], 0);
     const dist = (Math.abs(s16(g.p.x - o.x[s])) + Math.abs(s16(g.p.z - o.z[s]))) & 0xffff;

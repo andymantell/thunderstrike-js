@@ -63,6 +63,14 @@ Actions**.
 The simulation runs at the original 10 frames per second (one frame every five 50 Hz timer ticks), with the
 same integer arithmetic, so behaviour matches the DOS game.
 
+### Checking against the original
+
+`tools/oracle` runs your `TS.EXE` in a CPU emulator next to the port, feeds both the same key presses and
+compares their state every frame (objects, random numbers, terrain, shield, craft ratings, camera). Scripted
+runs through every arena with each craft, and through the end-of-round results, come out identical frame for
+frame. See [tools/oracle/README.md](tools/oracle/README.md). The emulator is only a test tool; the game itself
+is the JavaScript in `src/`.
+
 ### Known differences
 
 - Polygons are rasterised by the GPU with standard three.js perspective projection. The original truncated

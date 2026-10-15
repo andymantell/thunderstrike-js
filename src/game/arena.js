@@ -545,22 +545,25 @@ export class Arena {
       this.p.vx = u16(-s16(this.p.vx));
       this.p.vz = u16(-s16(this.p.vz));
       this.enemies = u16(this.enemies - 1);
-      this.loseShield(8);
+      if (this.loseShield(8)) return;
     } else {                                      // 01ac: shots and shrapnel
       this.sound.request(0x0e14);
       o.type[s] = T.SMALL_EXPLOSION; o.model[s] = 0x58f0;
       o.vx[s] = o.vy[s] = o.vz[s] = 0;
-      this.loseShield(4);
+      if (this.loseShield(4)) return;
     }
     o.model[0] = this.craft.model + 2;            // 0230
     this.typeMessage(t);                          // 0239
   }
 
+  /** Returns true when this hit used up the shield (01DF/022A then return at once). */
   loseShield(n) {
     const sh = s16(this.shield);
-    if (sh < 0) return;
+    if (sh < 0) return false;
     const v = sh - n;
-    this.shield = v < 0 ? 0xffff : v;
+    if (v >= 0) { this.shield = v; return false; }
+    this.shield = 0xffff;
+    return true;
   }
 
   /** 0x0239: per-type message from DS:0x174A */

@@ -31,7 +31,7 @@ def main(keys_file, slot, out_file, force_clear=0):
         t.keys(held)
         try:
             t.frame()
-        except RuntimeError as e:
+        except Exception as e:   # game over: the original goes back to its title screen
             print(f'frame {f}: the original left the arena loop ({e})')
             break
         out.append(snapshot(t))
