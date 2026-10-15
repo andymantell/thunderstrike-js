@@ -817,13 +817,17 @@ export class Arena {
    * lock, gauges, radar counts, messages). Returns HUD state for drawing.
    */
   hudPhase() {
-    // 1bfa: terrain window origin
-    this.prevOrigin = this.originCol | (this.originRow << 8);
-    this.originCol = ((this.p.x >> 10) - 8) & 0x3f;
-    this.originRow = ((this.p.z >> 10) - 8) & 0x3f;
+    this.windowOrigin();
     this.trackLock();                                   // 0dc8
     this.saboteursActive = 0;
     return null;
+  }
+
+  /** sub_1BFA: the terrain window follows the craft. */
+  windowOrigin() {
+    this.prevOrigin = this.originCol | (this.originRow << 8);
+    this.originCol = ((this.p.x >> 10) - 8) & 0x3f;
+    this.originRow = ((this.p.z >> 10) - 8) & 0x3f;
   }
 
   /** sub_0DC8 */

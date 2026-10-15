@@ -35,7 +35,8 @@ export class Renderer {
     this.makeViewScene();
     this.makeComposite();
     this.mode = 0;          // 0 screen only, 1 3D view + HUD layer, 2 front-end buffer, 3 3D + buffer
-    this.quarters = 0xf;    // attract mode shows only some quarters of the view each frame
+    this.quarters = 0xf;    // [0x6830]: which quarters of the window get the picture
+    this.halfSize = false;  // attract demo: a half-size picture (left half, even rows) into each chosen quarter
   }
 
   setScale(scale) {
@@ -124,9 +125,14 @@ export class Renderer {
     this.orthoCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     // copies quarters of the freshly rendered view into the displayed view
     this.copyMat = new THREE.ShaderMaterial({
-      uniforms: { src: { value: this.rt.texture } },
+      uniforms: { src: { value: this.rt.texture }, origin: { value: new THREE.Vector2() }, halfSize: { value: 0 } },
       vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
-      fragmentShader: 'uniform sampler2D src; varying vec2 vUv; void main(){ gl_FragColor = texture2D(src, vUv); }',
+      // sub_6113: with the half-size picture each quarter gets columns 0..127 of rows 0, 2, 4 ... 126
+      fragmentShader: `uniform sampler2D src; uniform vec2 origin; uniform float halfSize; varying vec2 vUv;
+        void main(){
+          vec2 uv = vUv;
+          if (halfSize > 0.5) { vec2 l = vUv - origin; uv = vec2(l.x, l.y * 2.0 + 0.5 / 128.0); }
+          gl_FragColor = texture2D(src, uv); }`,
       depthTest: false, depthWrite: false,
     });
     this.copyScene = new THREE.Scene();
@@ -182,6 +188,8 @@ export class Renderer {
         if (!(this.quarters & (1 << q))) continue;
         // bit0 top-left, bit1 top-right, bit2 bottom-left, bit3 bottom-right
         this.shown.scissor.set((q & 1) * w, (q & 2) ? 0 : h, w, h);
+        this.copyMat.uniforms.halfSize.value = this.halfSize ? 1 : 0;
+        this.copyMat.uniforms.origin.value.set((q & 1) * 0.5, (q & 2) ? 0 : 0.5);
         this.shown.scissorTest = true;
         gl.setRenderTarget(this.shown);
         gl.render(this.copyScene, this.orthoCam);

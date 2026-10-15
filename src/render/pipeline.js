@@ -28,6 +28,7 @@ export class Pipeline {
     this.count = 0;                          // [0x685D]
     this.table = new Uint8Array(0x200);      // 0x694F span table: left, right per row
     this.top = 0; this.bottom = 0; this.y0 = 0; this.rows = 0;   // [0x72B3] [0x72B5] [0x72B7] [0x72B9]
+    this.halfWidth = false;                  // [0x6832] bit 7 clear: the attract demo's half-size picture
   }
 
   X(i) { return this.v[XO + i]; }
@@ -228,11 +229,16 @@ export class Pipeline {
     this.walk(1, 1, 'store');
   }
 
-  /** sub_6A64: both chains, bottom = last lowest vertex; a right edge going up stops the right chain. */
+  /**
+   * sub_6690 / sub_6A64: both chains, bottom = last lowest vertex; a right
+   * edge going up stops the right chain. In the attract demo every x in the
+   * table is then halved (in place).
+   */
   walkLast() {
     this.extremesLast();
     this.walk(-1, 0, 'store');
     this.walk(1, 1, 'abort');
+    if (this.halfWidth) for (let k = 0; k < 2 * this.rows; k++) this.table[k & 0x1ff] >>= 1;
   }
 
   /** sub_5E22: the runs for this polygon from the span table. Reversed ends fill one pixel short. */

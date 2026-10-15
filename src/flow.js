@@ -29,7 +29,7 @@ export class Flow {
     this.display = new Display(app);
     this.arena = new Arena(app.data, app.speaker);
     this.arena.onControllerReset = () => app.controls.reset();
-    this.craftSlot = 0;            // [0x4286] = slot * 2
+    this.craftSlot = this.ds.u16(0x4286) >> 1;   // [0x4286] = slot * 2 (craft 2 until one is chosen)
     this.firstIntro = true;        // [0xAE0C]
     this.pauseToggle = 0x80;       // toggle bit for F10 (DS:0x9ED0)
     this.co = this.main();
@@ -858,16 +858,24 @@ export class Flow {
 
   // ---------------------------------------------------- attract mode
 
-  /** sub_9230: the computer flies about for 0x4B0 frames or until a key. */
+  /**
+   * sub_9230: the computer flies about for 0x4B0 frames or until a key. The
+   * picture is drawn half size ([0x6832] = [0x6833] = 0) without the HUD and
+   * copied into the quarters of the window [0x6830] picks, which change like
+   * a bad TV signal (sub_934D); quarters not picked keep their old picture.
+   */
   *attractDemo() {
-    const app = this.app, g = this.arena;
+    const app = this.app, g = this.arena, r = app.renderer;
     this.craftSlot = this.craftSlot ?? 0;
     g.selectCraft(this.craftSlot);
     g.newGame();
     this.applyArenaLook();
-    const demo = { turnTimer: 1, target: 0 };
+    const tv = this.tv ??= { hold: 0, pick: 0, sel: 0, quarter: 0 };   // [0xA7C2..0xA7C5]
+    const demo = { turnTimer: 1, target: 0 };                            // [0xA7A4], [0xA7A6]
+    let shown = 0xf;                                                     // [0x6830]
+    this.scene.pipe.halfWidth = true;
+    r.halfSize = true;
     let key = false;
-    let quarter = 0, holdQ = 0, pick = 0, sel = 0;
     for (let n = 0x4b0; n > 0 && !key; n--) {
       yield () => app.frameTicks >= 5;
       app.frameTicks = 0;
@@ -879,18 +887,26 @@ export class Flow {
       g.updatePlayer(); g.updateCameraYaw(); g.updateCameraHeight();
       g.o.roll[0] = (g.o.roll[0] & 0xff00) | (((-g.p.turn) << 2 >> 8) & 0xff);
       aiRun(g); g.moveObjects(); g.sampleGround();
-      this.renderFrame();
-      // 934d: the picture is shown in flickering quarters like a bad TV signal
-      if (--holdQ < 0) {
-        holdQ = 0xa;
-        if (--pick < 0) { pick = g.rng.next() & 0x1f; sel = g.rng.next() & 7; }
-        quarter = (quarter + 1) & 3;
-        const table = sel <= 3 ? 0xa7be : sel === 4 ? 0xa7ba : sel === 5 ? 0xa7b6 : 0xa7b2;
-        app.renderer.quarters = this.ds.u8(table + quarter);
+      // 49D4 .. 15A2 and the blit: the 3D view only, into the quarters chosen last frame
+      g.windowOrigin();
+      app.view.clear(0);
+      r.quarters = shown;
+      r.setPrimitives(this.scene.build(g), g.groundColour ?? 0, 'sky');
+      // 934D
+      if (--tv.hold < 0) {
+        tv.hold = 0xa;
+        // 9359: a new random pattern only while the byte counter stays non-negative
+        tv.pick = (tv.pick - 1) & 0xff;
+        if (!(tv.pick & 0x80)) { tv.pick = g.rng.next() & 0x1f; tv.sel = g.rng.next() & 7; }
+        tv.quarter = (tv.quarter + 1) & 3;
+        const table = tv.sel <= 3 || tv.sel === 7 ? 0xa7be : tv.sel === 4 ? 0xa7ba : tv.sel === 5 ? 0xa7b6 : 0xa7b2;
+        shown = this.ds.u8(table + tv.quarter);
       }
       key = this.inkey() !== 0;
     }
-    app.renderer.quarters = 0xf;
+    this.scene.pipe.halfWidth = false;
+    r.halfSize = false;
+    r.quarters = 0xf;
     this.kb.clearLatches();
     return key;
   }

@@ -35,6 +35,10 @@ PYTHON=.venv/bin/python tools/oracle/compare.sh FRAMES CRAFT [--cheat=N] [--full
 It prints the first frame that differs and the fields that differ, or how many frames were identical. The
 recordings are left in `tools/oracle/out/`.
 
+The attract demo has its own pair: `node tools/oracle/attract.mjs N port.json` and
+`python tools/oracle/attract.py N orig.json` record the half-size 3D picture and the chosen quarters for `N`
+frames.
+
 ## How it works
 
 `ts.py` loads `TS.EXE` at segment 0x1000 with a small DOS (memory allocation, file reads from the game folder,
