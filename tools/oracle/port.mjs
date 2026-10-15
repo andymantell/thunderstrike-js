@@ -10,6 +10,7 @@ const { loadGameData } = await import(join(root, 'src/data/loader.js'));
 const { Flow } = await import(join(root, 'src/flow.js'));
 const { Controls } = await import(join(root, 'src/input/controls.js'));
 const { Canvas8 } = await import(join(root, 'src/render/hud.js'));
+const { rasterise } = await import('./raster.mjs');
 
 const [frames, slot, outFile] = [+process.argv[2], +process.argv[3], process.argv[4]];
 const opt = Object.fromEntries(process.argv.slice(5).map((a) => { const [k, v] = a.replace(/^--/, '').split('='); return [k, v ?? '1']; }));
@@ -115,7 +116,7 @@ for (let f = 0; f < frames; f++) {
     g.finishFrame();
   }
   g.hudPhase();
-  flow.scene.build(g);
+  const prims = flow.scene.build(g);
   flow.hud.draw(g, flow.scene, app.view, app.screen, nop);
   flow.hud.counters(g, app.screen);
   const s = {};
@@ -127,6 +128,9 @@ for (let f = 0; f < frames; f++) {
   });
   if (opt.pictures && f % +opt.pictures === 0) {
     s.view = Buffer.from(app.view.d).toString('hex');
+    const frame = rasterise(prims, g.groundColour ?? 0);
+    for (let i = 0; i < frame.length; i++) if (app.view.d[i]) frame[i] = app.view.d[i];
+    s.frame = Buffer.from(frame).toString('hex');
     s.screen = Buffer.from(app.screen.d).toString('hex');
   }
   out.push(s);

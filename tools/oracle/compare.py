@@ -8,6 +8,8 @@ def first_difference(a, b):
     for f, (x, y) in enumerate(zip(a, b)):
         diffs = []
         for k, v in x.items():
+            if k in ('view', 'screen', 'frame'):
+                continue
             w = y.get(k)
             if k == 'map':
                 if v != w:

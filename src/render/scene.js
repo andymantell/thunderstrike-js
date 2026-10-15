@@ -7,7 +7,9 @@
  *
  * Output is a list of primitives in painter's order:
  *   { kind: 'poly', colour, pts: [[x,y,z], ...] }   filled flat polygon
- *   { kind: 'disc', colour, x, y, z, r }            particle (shots, explosions)
+ *   { kind: 'spans', colour, z, top, rows: [[x0, x1], ...] }
+ *                                                   particle (shots, explosions), already in screen
+ *                                                   pixels: rows from `top`, x0..x1 inclusive
  * The three.js renderer turns these into triangles drawn without a depth
  * buffer, so overlaps resolve exactly like the original painter's algorithm.
  */
@@ -29,6 +31,7 @@ export class SceneBuilder {
     this.ga = new Uint8Array(256);   // 0x2BAE layer A
     this.vis = new Uint8Array(256);  // 0x31AE flags
     this.order = [];
+    this.glowToggle = this.ds.u8(0x682e);   // [0x682E]
     this.animIndex = 0;              // [0x33AF]
   }
 
@@ -209,13 +212,63 @@ export class SceneBuilder {
     }
   }
 
+  /**
+   * sub_5DE5: colours 0x80 and up are the engine glow. It follows the
+   * player's thrust [0xBA] (dark when idle) and flickers: each glowing face
+   * drawn flips bit 1.
+   */
+  glow(colour, g) {
+    if (colour < 0x80) return colour;
+    const t = g.p.thrust >> 4;
+    if (t === 0) return 8;
+    const c = (Math.min(t, 0xf) | 0x20) ^ this.glowToggle;
+    this.glowToggle ^= 2;
+    return c;
+  }
+
+  /**
+   * sub_477C + sub_61D2: a particle as the original fills it. Centre and
+   * radius are projected with truncating integer division, and each row's
+   * half-width comes from the table for that radius (pointers at DS:0x6650
+   * into segment 0x7D). Rows whose span lies wholly off one side are left
+   * out of the span list, which moves the rows below them up, as in the
+   * original.
+   */
+  disc(px, py, pz, r, colour) {
+    const w = 0x190 + pz;
+    if (w <= 0) return null;
+    const cx = Math.trunc((px * 100) / w) + 0x80;
+    const cy = 0x40 - Math.trunc((py * 100) / w);
+    let rad = Math.trunc((r * 100) / w);
+    if (rad < 0 || rad > 0x7f) rad = 0x7f;
+    if (cx + rad < 0 || cx - rad > 0xff || cy + rad < 0 || cy - rad > 0x7f || rad === 0) return null;
+    const img = this.data.exe.image;
+    let si = 0x7d0 + this.ds.u16(0x6650 + (rad - 1) * 2);
+    let top = cy - rad;
+    if (top < 0) { si -= top; top = 0; }
+    const count = Math.min(cy + rad, 0x7f) - top + 2;
+    const rows = [];
+    for (let i = 0; i < count; i++) {
+      const hw = img[si++];
+      let left = cx - hw;
+      if (left < 0) left = 0;
+      else if (left > 0xff) continue;
+      let right = cx + hw;
+      if (right < 0) continue;
+      if (right > 0xff) right = 0xff;
+      rows.push([left, right]);
+    }
+    return { kind: 'spans', colour, z: pz, top, rows };
+  }
+
   /** sub_3EF3: one object's faces (VGA path at 0x4143) or particle (0x3FA9). */
   object(g, s, L, prims) {
     const o = g.o, tb = this.tables;
     const model = o.model[s];
     const px = s16(o.vxv[s]), py = s16(o.vyv[s]), pz = s16(o.vzv[s]);
     if (model & 0x80) {
-      prims.push({ kind: 'disc', colour: (model >> 8) & 0xff, x: px, y: py, z: pz, r: u8(-model) });
+      const d = this.disc(px, py, pz, u8(-model), this.glow((model >> 8) & 0xff, g));
+      if (d) prims.push(d);
       return;
     }
     const m = this.models.get(model & 0xffff);
@@ -243,7 +296,7 @@ export class SceneBuilder {
       if (sh < -8) sh = -8;
       const colour = ((f.colour & 0xf0) + sh + 8) & 0xff;
       if (f.idx.length >= 3 && !facesEye(vx, vy, vz, f.idx)) continue;
-      prims.push({ kind: 'poly', colour, pts: f.idx.map((i) => [vx[i], vy[i], vz[i]]) });
+      prims.push({ kind: 'poly', colour: this.glow(colour, g), pts: f.idx.map((i) => [vx[i], vy[i], vz[i]]) });
     }
   }
 }

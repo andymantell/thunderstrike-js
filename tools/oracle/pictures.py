@@ -8,6 +8,16 @@ usage: python pictures.py orig.json port.json
 """
 import json, sys
 
+def write_ppm(path, a, b):
+    """original | port | differences, grey levels from the colour index"""
+    rows = []
+    for y in range(128):
+        for x in range(256 * 3):
+            i = y * 256 + x % 256
+            v = a[i] if x < 256 else b[i] if x < 512 else (255 if a[i] != b[i] else 0)
+            rows.append(bytes([v, (v * 7) & 255, (v * 13) & 255]))
+    open(path, 'wb').write(b'P6 768 128 255\n' + b''.join(rows))
+
 def main(a_file, b_file):
     a, b = json.load(open(a_file)), json.load(open(b_file))
     bad = 0
@@ -20,7 +30,11 @@ def main(a_file, b_file):
                  if sa[i] != sb[i] and not (32 <= i % 320 < 288 and 16 <= i // 320 < 144)]
         va, vb = bytes.fromhex(x['view']), bytes.fromhex(y['view'])
         hud = [(i % 256, i // 256) for i in range(256 * 128) if vb[i] and va[i] != vb[i]]
-        status = 'ok' if not panel and not hud else 'DIFFERENT'
+        fr = bytes.fromhex(y['frame']) if 'frame' in y else None
+        same = sum(1 for i in range(256 * 128) if fr[i] == va[i]) if fr else 0
+        status = ('ok' if not panel and not hud else 'DIFFERENT') + (f'  3D view {100 * same / 32768:.1f}% same' if fr else '')
+        if fr and '--dump' in sys.argv:
+            write_ppm(f'{a_file}.{f}.ppm', va, fr)
         if panel or hud:
             bad += 1
         print(f'frame {f}: panel {len(panel)} px differ {panel[:6]}, HUD {len(hud)} px differ {hud[:6]}  {status}')

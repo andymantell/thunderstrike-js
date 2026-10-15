@@ -171,10 +171,16 @@ export class Renderer {
           put(pts[i][0], pts[i][1], pts[i][2], p.colour);
           put(pts[i + 1][0], pts[i + 1][1], pts[i + 1][2], p.colour);
         }
-      } else {
-        const { x, y, z, r, colour } = p;
-        put(x - r, y - r, z, colour, -1, -1, 1); put(x + r, y - r, z, colour, 1, -1, 1); put(x + r, y + r, z, colour, 1, 1, 1);
-        put(x - r, y - r, z, colour, -1, -1, 1); put(x + r, y + r, z, colour, 1, 1, 1); put(x - r, y + r, z, colour, -1, 1, 1);
+      } else if (p.kind === 'spans') {
+        // screen-space pixel rows, put back at the particle's depth so the camera lands them exactly
+        const w = p.z + 400, X = (sx) => ((sx - 128) * w) / 100, Y = (sy) => ((64 - sy) * w) / 100;
+        p.rows.forEach(([x0, x1], i) => {
+          const y = p.top + i;
+          if (y > 127) return;
+          const ax = X(x0), bx = X(x1 + 1), ay = Y(y), by = Y(y + 1);
+          put(ax, ay, p.z, p.colour); put(bx, ay, p.z, p.colour); put(bx, by, p.z, p.colour);
+          put(ax, ay, p.z, p.colour); put(bx, by, p.z, p.colour); put(ax, by, p.z, p.colour);
+        });
       }
     }
     this.geo.setDrawRange(0, n);
