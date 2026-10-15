@@ -247,13 +247,12 @@ export class Flow {
     const d = this.display, g = this.arena, ds = this.ds;
     computeRates(g, ds);
     this.kb.clearLatches();
-    let blink = ds.u8(0x19ef);
-    this.overviewAnim = this.overviewAnim ?? 0;
+    this.statsBlink ??= ds.u8(0x19ef);   // [0x19EF] keeps its phase between visits
     for (;;) {
       this.overview();
       d.print(4, 1, 1, ds.cstr(0x10a9));
       d.print(4, 1, 6, ds.cstr(0x10da));
-      const c = blink; blink ^= 8;
+      const c = this.statsBlink; this.statsBlink ^= 8;
       const col = (((g.p.x >> 8) >> 4) & 0xf) + 0x10, row = (((-(g.p.z >> 8)) & 0xff) >> 4) & 0xf;
       d.print(c, col, row, '\x7f');
       d.print(4, 1, 0xb, ds.cstr(0x110b));
@@ -417,7 +416,7 @@ export class Flow {
         for (let k = 1; k < 128; k++) {
           if (!this.kb.latch[k]) continue;
           this.kb.latch[k] = 0;
-          if (ds.u8(0xa1c6 + k) & 0x80 && ds.u8(0xa1c6 + k) !== 0xfe) continue;
+          if (ds.u8(0xa1c6 + k) & 0x80) continue;   // sub_7F36: no name, not accepted
           if (taken.includes(k)) continue;
           sc = k; return true;
         }
@@ -425,7 +424,7 @@ export class Flow {
       };
       taken.push(sc);
       c.keys[order[i]] = sc;
-      d.print(4, 0x18, row, keyName(ds, sc));
+      d.print(4, 0xf + ds.cstr(0xa76b + i * 8).length, row, keyName(ds, sc));   // continues after the label
       d.blit();
     }
     yield 25;

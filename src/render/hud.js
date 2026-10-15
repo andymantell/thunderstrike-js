@@ -22,17 +22,43 @@ export class Canvas8 {
       if (c !== transparent) this.plot(dx + x, dy + y, c);
     }
   }
-  /** sub_5EF5-style line between two points. */
+  /**
+   * sub_5EF5: the VGA driver's line routine. Works on a byte offset into the
+   * 256-wide buffer (so x runs on into the next row), y is a byte.
+   * Horizontal, vertical and 45-degree lines include both ends; other lines
+   * stop one pixel short of the far end.
+   */
   line(x0, y0, x1, y1, c) {
-    let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
-    const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
-    let err = dx + dy;
-    for (;;) {
-      this.plot(x0, y0, c);
-      if (x0 === x1 && y0 === y1) break;
-      const e2 = 2 * err;
-      if (e2 >= dy) { err += dy; x0 += sx; }
-      if (e2 <= dx) { err += dx; y0 += sy; }
+    const put = (di) => { di &= 0xffff; this.plot(di & 0xff, di >> 8, c); };
+    y0 &= 0xff; y1 &= 0xff;
+    if (x0 === x1) {
+      let n = y1 - y0, step = 0x100;
+      if (n < 0) { step = -0x100; n = -n; }
+      for (let di = y0 * 256 + x0, i = 0; i <= n; i++, di += step) put(di);
+      return;
+    }
+    if (x0 > x1) { [x0, x1] = [x1, x0]; [y0, y1] = [y1, y0]; }
+    let di = y0 * 256 + x0;
+    let dy = y1 - y0;
+    const dx = x1 - x0;
+    if (dy === 0) { for (let i = 0; i <= dx; i++) put(di++); return; }
+    const row = dy > 0 ? 0x100 : -0x100;
+    dy = Math.abs(dy);
+    if (dy === dx) { for (let i = 0; i <= dx; i++, di += row + 1) put(di); return; }
+    if (dy < dx) {
+      let err = dx >> 1;
+      for (let i = 0; i < dx; i++) {
+        put(di); di++;
+        err -= dy;
+        if (err < 0) { err += dx; di += row; }
+      }
+    } else {
+      let err = dy >> 1;
+      for (let i = 0; i < dy; i++) {
+        put(di); di += row;
+        err -= dx;
+        if (err < 0) { err += dy; di++; }
+      }
     }
   }
 }
