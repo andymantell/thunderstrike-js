@@ -61,11 +61,17 @@ fileInput.addEventListener('change', () => {
   const f = fileInput.files[0];
   if (f) handle(f.arrayBuffer().then(fromZip));
 });
-drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
-drop.addEventListener('dragleave', () => drop.classList.remove('over'));
-drop.addEventListener('drop', (e) => {
+// the whole page takes the drop while the loader shows, so a near miss does not open the zip in the browser
+const loaderVisible = () => !loader.hidden;
+window.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  if (loaderVisible()) drop.classList.add('over');
+});
+window.addEventListener('dragleave', (e) => { if (!e.relatedTarget) drop.classList.remove('over'); });
+window.addEventListener('drop', (e) => {
   e.preventDefault();
   drop.classList.remove('over');
+  if (!loaderVisible()) return;
   const item = [...e.dataTransfer.items].find((i) => i.kind === 'file');
   const entry = item?.webkitGetAsEntry?.();
   if (entry?.isDirectory) handle(readDirectory(entry));

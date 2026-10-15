@@ -10,9 +10,15 @@ your browser and keeps them on your device only.
 ## Playing
 
 1. Open the site (GitHub Pages) or run it locally (see below).
-2. Drop the original game's `.zip`, or the folder that contains `TS.EXE`, onto the page.
-   The game needs `TS.EXE`, `MZ.DAT`, `SKY1-5.DAT`, `BIN/*` and the `GR/*V.IGR` VGA pictures.
-3. Click the page once to enable sound.
+2. Download the DOS version of the game, for example from
+   [My Abandonware](https://www.myabandonware.com/game/thunderstrike-11d) (`Thunderstrike_DOS_EN.zip`), or use
+   your own copy of the original release.
+3. Drop the .zip (no need to unzip it), or the folder that contains `TS.EXE`, anywhere on the page. The game
+   needs `TS.EXE`, `MZ.DAT`, `SKY1-5.DAT`, `BIN/*` and the `GR/*V.IGR` VGA pictures. It is remembered on that
+   device, so this is needed only once.
+4. Click the page once to enable sound.
+
+Thunderstrike is still under copyright; whether you may download it where you live is for you to judge.
 
 Default keys (redefinable from Options, as in the original):
 

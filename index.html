@@ -16,6 +16,9 @@
     #drop { margin-top: 16px; border: 2px dashed var(--border); border-radius: 8px; padding: 24px; text-align: center; cursor: pointer; }
     #drop.over { border-color: var(--accent); }
     #error { color: #ff7b72; margin-top: 12px; white-space: pre-wrap; }
+    .steps { padding-left: 20px; margin: 12px 0 0; }
+    .steps li { margin: 6px 0; }
+    a { color: var(--accent); }
     .hint { color: #8b949e; font-size: 12px; margin-top: 12px; }
     button.link { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0; font: inherit; }
     #gear { position: fixed; top: 8px; right: 8px; background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; cursor: pointer; opacity: .6; }
@@ -32,11 +35,19 @@
   <div id="loader" hidden>
     <div class="card">
       <h1>Thunderstrike JS</h1>
-      <p>A reimplementation of the 1990 DOS game <em>Thunderstrike</em> by Millennium. It contains no game data:
-        to play, supply your own copy of the original DOS release (the folder containing <code>TS.EXE</code>, or a .zip of it).</p>
-      <div id="drop">Drop the game .zip or folder here, or click to choose a .zip<input id="file" type="file" accept=".zip" hidden></div>
+      <p>A faithful reimplementation of the 1990 DOS game <em>Thunderstrike</em> by Millennium. This site contains
+        no game data: it runs on your own copy of the original DOS files, which never leave your browser.</p>
+      <ol class="steps">
+        <li><a href="https://www.myabandonware.com/game/thunderstrike-11d" target="_blank" rel="noopener">Open
+          Thunderstrike on My Abandonware</a> and download the DOS version (<code>Thunderstrike_DOS_EN.zip</code>).</li>
+        <li>Drop that .zip anywhere on this page, or click the box below to choose it. No need to unzip it.</li>
+        <li>Click the game once to turn the sound on.</li>
+      </ol>
+      <div id="drop">Drop the game .zip (or its folder) here, or click to choose it<input id="file" type="file" accept=".zip,application/zip" hidden></div>
       <div id="error"></div>
-      <p class="hint">Files are read locally in your browser and remembered on this device only.</p>
+      <p class="hint">You only need to do this once: the files are remembered on this device (Settings → Forget my
+        game files removes them). Any copy of the DOS release works, e.g. your original disks.
+        Thunderstrike is still under copyright; whether you may download it where you live is for you to judge.</p>
     </div>
   </div>
   <button id="gear" hidden title="Settings">Settings</button>
