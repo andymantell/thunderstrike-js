@@ -77,7 +77,8 @@ export class Speaker {
     this.pending = 0xffff;
   }
 
-  play(id) { this.r = this.record(id & 0x1f); this.active = true; }
+  /** Driver 0x459: load the record and start on the next tick (the speaker is switched off meanwhile). */
+  play(id) { this.r = this.record(id & 0x1f); this.active = true; this.silence(); }
   /** CS:2700: stop the current effect if its id is 6 or less (engine noises). */
   stopIfBelow(n) { if (this.active && ((this.current >> 8) & 0xff) <= n) this.stop(); }
   stop() { this.active = false; this.silence(); }
@@ -108,7 +109,10 @@ export class Speaker {
       r.gatePat = ((r.gatePat >> 1) | (gate << 7)) & 0xff;
       if (!gate) divisor = dx;
     }
-    if (divisor <= 1) this.silence(); else this.tone(PIT_HZ / divisor);
+    // 0x42F: 1 switches the speaker off, 0x100 leaves the PIT as it was, 0 means 65536
+    if (divisor === 1) this.silence();
+    else if (divisor === 0x100) this.tone(this.lastHz ?? PIT_HZ / 0x100);
+    else this.tone((this.lastHz = PIT_HZ / (divisor || 0x10000)));
   }
 
   tone(hz) {
