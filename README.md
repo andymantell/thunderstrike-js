@@ -32,7 +32,14 @@ Default keys (redefinable from Options, as in the original):
 | F4 | round, arena and game statistics |
 | F10 | pause (Q steps one frame while paused) |
 
-Use the **Settings** button to switch to mouse control or set the volume.
+Use the **Settings** button to switch to mouse control, pick the graphics mode or set the volume. All three
+graphics modes play exactly the same game (the game itself always runs at its original 10 frames a second):
+
+- **Original**: the original's own frames, pixel for pixel.
+- **Original, smooth**: the original's pixel-exact renderer, drawing in-between frames at the screen's refresh
+  rate (for example 120 fps). Moving things are blended between game frames, which shows the picture one game
+  frame (0.1 s) late.
+- **Enhanced 3D**: the same scene drawn by three.js as real 3D at screen resolution, smooth as above.
 
 ## Development
 
@@ -62,6 +69,7 @@ Actions**.
 | `src/game/terrain.js` | `sub_14E8`, `sub_201E`, `sub_20C2` | height interpolation, bunkers and pyramids built into the map |
 | `src/render/scene.js` | `sub_1BFA`, `sub_3D32`, `sub_1D2B`, `sub_15A2`, `sub_4143` | the original view-space maths and painter's draw order |
 | `src/render/pipeline.js` | `sub_43C5`, `sub_4770`, `sub_08EE`, `sub_6870`, `sub_6A64`, `sub_5E22` | the original's polygon pipeline: near clip, integer projection, screen clip and edge walkers, giving the exact pixel runs of every face |
+| `src/render/smooth.js`, `src/render/modern.js` | | in-between frames for the smooth modes, and the floating-point scene for enhanced 3D |
 | `src/render/renderer.js` | VGA output | three.js draws those runs in the original order into a 256x128 colour-index target; a final pass composes the 320x200 screen through the VGA palette |
 | `src/render/hud.js` | `sub_0D6D`, `sub_0F4E`, `sub_62BE` | messages, scanner, arena map, gauges, counters |
 | `src/flow.js` | front end `0x9D0B-0xBFFF` | title, attract mode, presenter, menus, craft selection, briefings, results, game over |

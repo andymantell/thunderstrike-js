@@ -12,6 +12,8 @@
 import { Arena, approach } from './game/arena.js';
 import { T } from './game/objects.js';
 import { SceneBuilder } from './render/scene.js';
+import { ModernSceneBuilder } from './render/modern.js';
+import { Smoother } from './render/smooth.js';
 import { Hud, Fonts } from './render/hud.js';
 import { Display } from './ui/display.js';
 import { runAll as aiRun } from './game/ai.js';
@@ -25,6 +27,13 @@ export class Flow {
     this.data = app.data;
     this.ds = app.data.exe.ds;
     this.scene = new SceneBuilder(app.data);
+    // display modes: 'original' (the game's frames), 'smooth' (in-between frames, original
+    // pipeline) or 'enhanced' (in-between frames, three.js perspective at screen resolution)
+    this.renderMode = 'original';
+    this.smoother = new Smoother();
+    this.smoothScene = new SceneBuilder(app.data);
+    this.modernScene = new ModernSceneBuilder(app.data);
+    this.inPlay = false;
     this.hud = new Hud(app.data);
     this.display = new Display(app);
     this.arena = new Arena(app.data, app.speaker);
@@ -163,6 +172,11 @@ export class Flow {
 
   /** CS:22C1 main loop. */
   *play() {
+    this.inPlay = true;
+    try { yield* this.arenaLoop(); } finally { this.inPlay = false; this.app.renderer.enhanced = false; }
+  }
+
+  *arenaLoop() {
     const app = this.app, g = this.arena;
     this.applyArenaLook();
     app.frameTicks = 0;
@@ -205,6 +219,7 @@ export class Flow {
     this.loadPanel();
     app.setColours(0x80, this.data.skies[g.arena]);
     this.hud.counters(g, app.screen);
+    this.smoother.reset();
     app.show3D();
   }
 
@@ -212,10 +227,34 @@ export class Flow {
     const app = this.app, g = this.arena;
     app.speaker.flush();                                   // 82a6
     g.hudPhase();
+    // the game's own frame is always built: the HUD and the camera depend on it
+    this.frameStart = { glow: this.scene.glowToggle, anim: this.scene.animIndex };
     const prims = this.scene.build(g);
-    app.renderer.setPrimitives(prims, g.groundColour ?? 0, 'sky');
+    if (this.renderMode === 'original') app.renderer.setPrimitives(prims, g.groundColour ?? 0, 'sky');
     this.hud.draw(g, this.scene, app.view, app.screen, () => app.speaker.request(0x0764));
     this.hud.counters(g, app.screen);
+    this.smoother.record(g, performance.now());
+  }
+
+  /**
+   * Smooth and enhanced modes, once per display frame: the 3D view between
+   * the last two game frames. The HUD stays as the game frame drew it.
+   */
+  drawBetween(now) {
+    const app = this.app, r = app.renderer;
+    const on = this.inPlay && this.renderMode !== 'original' && r.mode === 1;
+    r.enhanced = on && this.renderMode === 'enhanced';
+    if (!on || !this.frameStart) return;
+    const t = Math.min(1, Math.max(0, (now - this.smoother.time) / 100));
+    const smooth = this.renderMode === 'smooth';
+    const v = this.smoother.view(t, smooth);
+    if (!v) return;
+    const b = smooth ? this.smoothScene : this.modernScene;
+    b.glowToggle = this.frameStart.glow;
+    b.animIndex = this.frameStart.anim;
+    const prims = b.build(v);
+    if (smooth) r.setPrimitives(prims, v.groundColour, 'sky');
+    else r.setEnhancedPrimitives(prims, v.groundColour);
   }
 
   /**

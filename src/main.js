@@ -100,18 +100,20 @@ async function devFiles() {
 
 function setupSettings(app) {
   const gear = document.getElementById('gear'), panel = document.getElementById('settings');
-  const controls = document.getElementById('opt-controls');
+  const controls = document.getElementById('opt-controls'), render = document.getElementById('opt-render');
   const volume = document.getElementById('opt-volume');
   const saved = JSON.parse(localStorage.getItem('thunderstrike-settings') || '{}');
   const apply = () => {
     app.controls.mode = controls.value;
+    app.flow.renderMode = render.value;
     app.setVolume(+volume.value / 100);
-    localStorage.setItem('thunderstrike-settings', JSON.stringify({ controls: controls.value, volume: volume.value }));
+    localStorage.setItem('thunderstrike-settings', JSON.stringify({ controls: controls.value, render: render.value, volume: volume.value }));
   };
   if (saved.controls) controls.value = saved.controls;
   if (saved.volume) volume.value = saved.volume;
+  if (saved.render) render.value = saved.render;
   apply();
-  for (const el of [controls, volume]) el.addEventListener('change', apply);
+  for (const el of [controls, render, volume]) el.addEventListener('change', apply);
   gear.hidden = false;
   gear.addEventListener('click', () => { panel.hidden = !panel.hidden; });
   document.getElementById('opt-forget').addEventListener('click', async () => { await forgetArchive(); location.reload(); });

@@ -13,6 +13,7 @@ import * as THREE from 'three';
 
 const VIEW_W = 256, VIEW_H = 128;
 const MAX_VERTS = 6 * 40000;   // two triangles per pixel run
+const MAX_HD = 60000;
 
 export class Renderer {
   constructor(canvas, { scale = 1 } = {}) {
@@ -33,7 +34,9 @@ export class Renderer {
 
     this.makeViewTarget();
     this.makeViewScene();
+    this.makeEnhancedScene();
     this.makeComposite();
+    this.enhanced = false;  // draw the 3D view with makeEnhancedScene at screen resolution
     this.mode = 0;          // 0 screen only, 1 3D view + HUD layer, 2 front-end buffer, 3 3D + buffer
     this.quarters = 0xf;    // [0x6830]: which quarters of the window get the picture
     this.halfSize = false;  // attract demo: a half-size picture (left half, even rows) into each chosen quarter
@@ -95,15 +98,92 @@ export class Renderer {
     this.viewScene.add(this.mesh);
   }
 
+  /**
+   * Enhanced mode: view-space polygons from ModernSceneBuilder, drawn with
+   * the original's projection (sx = 128 + 100X/(Z+400), sy = 64 - 100Y/(Z+400))
+   * as a perspective camera, in the original's painter's order, at the size
+   * the view has on screen, multisampled, coloured through the palette.
+   */
+  makeEnhancedScene() {
+    this.hdScene = new THREE.Scene();
+    const fov = THREE.MathUtils.radToDeg(2 * Math.atan(64 / 100));
+    this.hdCamera = new THREE.PerspectiveCamera(fov, 2, 10, 20000);
+    this.hdCamera.position.set(0, 0, 400);
+    this.hdCamera.lookAt(0, 0, 0);
+    this.hdBg = new THREE.ShaderMaterial({
+      uniforms: { ground: { value: 0 }, palette: { value: this.palette } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+      fragmentShader: `uniform float ground; uniform sampler2D palette; varying vec2 vUv;
+        vec4 pal(float i){ return texture2D(palette, vec2((i + 0.5) / 256.0, 0.5)); }
+        void main(){ float row = floor((1.0 - vUv.y) * 128.0);
+          gl_FragColor = pal(row < 64.0 ? 128.0 + floor(row / 2.0) : ground); }`,
+      depthTest: false, depthWrite: false,
+    });
+    const bg = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.hdBg);
+    bg.frustumCulled = false; bg.renderOrder = -1;
+    this.hdScene.add(bg);
+    const geo = new THREE.BufferGeometry();
+    this.hdPos = new Float32Array(MAX_HD * 3);
+    this.hdCi = new Float32Array(MAX_HD);
+    this.hdDisc = new Float32Array(MAX_HD * 3);
+    geo.setAttribute('position', new THREE.BufferAttribute(this.hdPos, 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute('ci', new THREE.BufferAttribute(this.hdCi, 1).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute('disc', new THREE.BufferAttribute(this.hdDisc, 3).setUsage(THREE.DynamicDrawUsage));
+    this.hdGeo = geo;
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { palette: { value: this.palette } },
+      vertexShader: `attribute float ci; attribute vec3 disc; varying float vCi; varying vec3 vDisc;
+        void main(){ vCi = ci; vDisc = disc; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+      fragmentShader: `uniform sampler2D palette; varying float vCi; varying vec3 vDisc;
+        void main(){ if (vDisc.z > 0.5 && dot(vDisc.xy, vDisc.xy) > 1.0) discard;
+          gl_FragColor = texture2D(palette, vec2((floor(vCi + 0.5) + 0.5) / 256.0, 0.5)); }`,
+      depthTest: false, depthWrite: false, side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.frustumCulled = false;
+    this.hdScene.add(mesh);
+    this.hdTarget = new THREE.WebGLRenderTarget(512, 256, { samples: 4, depthBuffer: false });
+  }
+
+  /** Enhanced mode: view-space polygons and discs from ModernSceneBuilder. */
+  setEnhancedPrimitives(prims, groundColour) {
+    this.hdBg.uniforms.ground.value = groundColour;
+    let n = 0;
+    const put = (x, y, z, c, dx = 0, dy = 0, d = 0) => {
+      if (n >= MAX_HD) return;
+      this.hdPos[n * 3] = x; this.hdPos[n * 3 + 1] = y; this.hdPos[n * 3 + 2] = -z;
+      this.hdCi[n] = c;
+      this.hdDisc[n * 3] = dx; this.hdDisc[n * 3 + 1] = dy; this.hdDisc[n * 3 + 2] = d;
+      n++;
+    };
+    for (const p of prims) {
+      if (p.kind === 'poly') {
+        const pts = p.pts;
+        for (let i = 1; i + 1 < pts.length; i++) {
+          put(pts[0][0], pts[0][1], pts[0][2], p.colour);
+          put(pts[i][0], pts[i][1], pts[i][2], p.colour);
+          put(pts[i + 1][0], pts[i + 1][1], pts[i + 1][2], p.colour);
+        }
+      } else if (p.kind === 'disc') {
+        const { x, y, z, r, colour } = p;
+        put(x - r, y - r, z, colour, -1, -1, 1); put(x + r, y - r, z, colour, 1, -1, 1); put(x + r, y + r, z, colour, 1, 1, 1);
+        put(x - r, y - r, z, colour, -1, -1, 1); put(x + r, y + r, z, colour, 1, 1, 1); put(x - r, y + r, z, colour, -1, 1, 1);
+      }
+    }
+    this.hdGeo.setDrawRange(0, n);
+    for (const k of ['position', 'ci', 'disc']) this.hdGeo.attributes[k].needsUpdate = true;
+    this.hdDirty = true;
+  }
+
   makeComposite() {
     this.compositeMat = new THREE.ShaderMaterial({
       uniforms: {
         screen: { value: this.screenTex }, view: { value: this.shown.texture },
         overlay: { value: this.overlayTex }, palette: { value: this.palette },
-        mode: { value: 0 },
+        mode: { value: 0 }, hd: { value: null }, useHd: { value: 0 },
       },
       vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
-      fragmentShader: `uniform sampler2D screen, view, overlay, palette; uniform float mode; varying vec2 vUv;
+      fragmentShader: `uniform sampler2D screen, view, overlay, palette, hd; uniform float mode, useHd; varying vec2 vUv;
         vec4 pal(float i){ return texture2D(palette, vec2((floor(i + 0.5) + 0.5) / 256.0, 0.5)); }
         void main(){
           vec2 p = vec2(vUv.x * 320.0, (1.0 - vUv.y) * 200.0);
@@ -112,6 +192,7 @@ export class Renderer {
             vec2 q = vec2((p.x - 32.0) / 256.0, (p.y - 16.0) / 128.0);
             float o = texture2D(overlay, q).r * 255.0;
             float v = texture2D(view, vec2(q.x, 1.0 - q.y)).r * 255.0;
+            if (useHd > 0.5 && mode > 0.5 && mode < 1.5 && o < 0.5) { gl_FragColor = texture2D(hd, vec2(q.x, 1.0 - q.y)); return; }
             ci = (mode > 1.5 && mode < 2.5) ? o : (o > 0.5 ? o : v);
           }
           gl_FragColor = pal(ci);
@@ -197,6 +278,17 @@ export class Renderer {
       this.shown.scissorTest = false;
       gl.setScissorTest(false);
     }
+    const hd = this.enhanced && this.mode === 1;
+    if (hd && this.hdDirty) {
+      this.hdDirty = false;
+      const size = this.gl.getDrawingBufferSize(new THREE.Vector2());
+      const w = Math.max(256, Math.round((size.x * 256) / 320)), h = Math.max(128, Math.round((size.y * 128) / 200));
+      if (this.hdTarget.width !== w || this.hdTarget.height !== h) this.hdTarget.setSize(w, h);
+      gl.setRenderTarget(this.hdTarget);
+      gl.render(this.hdScene, this.hdCamera);
+    }
+    this.compositeMat.uniforms.useHd.value = hd ? 1 : 0;
+    this.compositeMat.uniforms.hd.value = this.hdTarget.texture;
     this.screenTex.needsUpdate = true;
     this.overlayTex.needsUpdate = true;
     this.compositeMat.uniforms.mode.value = this.mode;
@@ -204,7 +296,11 @@ export class Renderer {
     gl.render(this.compositeScene, this.orthoCam);
   }
 
-  resize(width, height) { this.gl.setSize(width, height, false); }
+  /** Canvas size in CSS pixels; the drawing buffer follows the device pixel ratio for enhanced mode. */
+  resize(width, height) {
+    const r = Math.min(window.devicePixelRatio || 1, 3);
+    this.gl.setSize(Math.round(width * r), Math.round(height * r), false);
+  }
 }
 
 function indexTexture(data, w, h) {

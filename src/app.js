@@ -109,6 +109,7 @@ export class App {
       let n = Math.min(due - this.ticks, 25);
       if (due - this.ticks > 25) this.ticks = due - 25;
       while (n-- > 0) this.tick();
+      this.flow.drawBetween(now);
       if (this.paletteDirty) { this.renderer.setPalette(this.dac); this.paletteDirty = false; }
       this.renderer.present();
       requestAnimationFrame(loop);
