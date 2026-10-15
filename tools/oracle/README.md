@@ -25,6 +25,7 @@ PYTHON=.venv/bin/python tools/oracle/compare.sh FRAMES CRAFT [--cheat=N] [--full
 - `FRAMES`: arena frames to run (10 per second of play), `CRAFT`: 0-4.
 - `--cheat=N`: type the developers' round-skip sequence every `N` frames to reach later rounds and arenas.
 - `--full`: also type the full-upgrade sequence the first time.
+- `--mouse`: control with the mouse (int 33h) instead of the keyboard, the game started with `VM`.
 - `--clear=N`: every `N` frames, zero the bunker and enemy counts on both sides so the round ends, which runs
   the round results (and the craft rating changes they make).
 

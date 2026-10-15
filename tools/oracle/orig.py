@@ -21,14 +21,19 @@ def snapshot(t):
 
 def main(keys_file, slot, out_file, force_clear=0):
     frames = json.load(open(keys_file))
-    t = TS()
+    mouse = frames and isinstance(frames[0], dict)
+    t = TS(mouse=mouse)
     t.start_game(slot)
     out = []
     for f, held in enumerate(frames):
         if force_clear and f % force_clear == force_clear - 1:
             t.wds16(0x2320, 0)   # bunkers left
             t.wds16(0x4308, 0)   # enemies
-        t.keys(held)
+        if mouse:
+            t.keys(held['keys'])
+            t.mouse_state(*held['mouse'])
+        else:
+            t.keys(held)
         try:
             t.frame()
         except Exception as e:   # game over: the original goes back to its title screen

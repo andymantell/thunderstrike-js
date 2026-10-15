@@ -18,7 +18,10 @@ def lin(seg, off):
 
 
 class TS:
-    def __init__(self, cmd=b' VK'):
+    def __init__(self, cmd=b' VK', mouse=False):
+        if mouse:
+            cmd = b' VM'
+            self.mouse = {'x': 0x80, 'y': 0x80, 'buttons': 0, 'presses': [0, 0]}
         exe = open(os.path.join(GAME, 'TS.EXE'), 'rb').read()
         (sig, cblp, cp, crlc, cparhdr, minalloc, maxalloc, ss, sp, csum, ip, cs, lfarlc) = struct.unpack('<13H', exe[:26])
         size = cp * 512 - (512 - cblp if cblp else 0) - cparhdr * 16
@@ -35,6 +38,8 @@ class TS:
         uc.mem_write(lin(PSP, 0x80), bytes([len(cmd)]) + cmd + b'\r')
         uc.mem_write(lin(PSP, 0), b'\xcd\x20')
         uc.mem_write(0x463, struct.pack('<H', 0x3d4))   # BIOS: CRTC base port
+        if mouse:
+            uc.mem_write(0xcc, b'\x00\x00\x00\xf0')       # int 33h vector present
         self.heap = LOAD + (size + 15) // 16 + minalloc + 0x100
         self.cs = LOAD + 0x485
         self.ds_seg = LOAD + 0x10a4
@@ -128,8 +133,7 @@ class TS:
                 self.w(UC_X86_REG_AX, 0x1a)
                 self.w(UC_X86_REG_BX, 8)
         elif intno == 0x33:
-            if self.r(UC_X86_REG_AX) == 0:
-                self.w(UC_X86_REG_AX, 0)
+            self.mouse_int()
         elif intno == 0x80:
             if ah in (0, 0x84):
                 self.w(UC_X86_REG_AX, 0)
@@ -137,6 +141,27 @@ class TS:
             self.w(UC_X86_REG_AX, 0)
         else:
             self.log.append(('int', hex(intno), hex(ah)))
+
+    # mouse driver: position 0..0xFF on both axes, as sub_7C7F sets it up
+    mouse = None
+
+    def mouse_int(self):
+        m = self.mouse
+        ax = self.r(UC_X86_REG_AX)
+        if m is None:
+            if ax == 0:
+                self.w(UC_X86_REG_AX, 0)       # no mouse
+            return
+        if ax == 0:
+            self.w(UC_X86_REG_AX, 0xffff); self.w(UC_X86_REG_BX, 2)
+        elif ax == 3:
+            self.w(UC_X86_REG_BX, m['buttons']); self.w(UC_X86_REG_CX, m['x']); self.w(UC_X86_REG_DX, m['y'])
+        elif ax == 4:
+            m['x'], m['y'] = self.r(UC_X86_REG_CX), self.r(UC_X86_REG_DX)
+        elif ax == 5:
+            b = self.r(UC_X86_REG_BX)
+            self.w(UC_X86_REG_AX, m['buttons'])
+            self.w(UC_X86_REG_BX, m['presses'][b]); m['presses'][b] = 0
 
     def dos(self, ah, al):
         uc = self.uc
@@ -251,6 +276,13 @@ class TS:
                 self.wds16(0x9e80, 0x9d80 + sc)
             self.wds8(0x9d80 + sc, 0 if sc in held else 0x80)
         self.held = set(held)
+
+    def mouse_state(self, x, y, buttons):
+        m = self.mouse
+        for b in (0, 1):
+            if buttons & (1 << b) and not m['buttons'] & (1 << b):
+                m['presses'][b] += 1
+        m['x'], m['y'], m['buttons'] = x, y, buttons
 
     def frame(self):
         """One pass of the main loop, CS:22C1 up to the frame wait at CS:233B."""

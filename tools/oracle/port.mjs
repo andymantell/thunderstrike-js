@@ -71,6 +71,13 @@ function keysFor(f) {
   return scripted(f);
 }
 
+// mouse script: sweeping steering and height, left button (thrust) mostly held, right (fire) tapped
+function mouseFor(f) {
+  const x = Math.round(0x80 + 0x70 * Math.sin(f / 37)) & 0xff, y = Math.round(0x80 + 0x50 * Math.sin(f / 23)) & 0xff;
+  return [x, y, (f % 40 < 30 ? 1 : 0) | (f % 4 === 0 ? 2 : 0)];
+}
+const mouse = !!opt.mouse;
+if (mouse) app.controls.mode = 'mouse';
 flow.craftSlot = slot;
 g.selectCraft(slot);
 app.controls.reset();
@@ -79,8 +86,15 @@ const FIELDS = ['x', 'y', 'z', 'model', 'vxv', 'vyv', 'vzv', 'pitch', 'yaw', 'ro
 let held = new Set();
 const out = [], keyLog = [];
 for (let f = 0; f < frames; f++) {
-  const k = new Set(keysFor(f));
-  keyLog.push([...k]);
+  const k = new Set(mouse ? (cheatPeriod ? keysFor(f).filter((sc) => sc !== 0x19 && sc !== 0x39 && sc !== 0x2c && sc !== 0x2d && sc !== 0x26 && sc !== 0x33) : []) : keysFor(f));
+  if (mouse) {
+    const [x, y, b] = mouseFor(f), m = app.controls.mouse;
+    // int 33h function 5 counts presses: right (button 1) is fire, left (button 0) thrust
+    if (b & 2 && !(m.buttons & 2)) m.pressed[0]++;
+    if (b & 1 && !(m.buttons & 1)) m.pressed[1]++;
+    m.x = x; m.y = y; m.buttons = b;
+    keyLog.push({ keys: [...k], mouse: [x, y, b] });
+  } else keyLog.push([...k]);
   for (let sc = 1; sc < 128; sc++) {
     if (k.has(sc) && !held.has(sc)) { kb.latch[sc] = 1; kb.last = sc; }
     kb.state[sc] = k.has(sc) ? 0 : 0x80;
