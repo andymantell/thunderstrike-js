@@ -26,7 +26,7 @@ Default keys (redefinable from Options, as in the original):
 | F4 | round, arena and game statistics |
 | F10 | pause (Q steps one frame while paused) |
 
-Use the **Settings** button to switch to mouse control, change the 3D resolution or set the volume.
+Use the **Settings** button to switch to mouse control or set the volume.
 
 ## Development
 
