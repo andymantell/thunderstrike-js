@@ -13,7 +13,31 @@ export class Controls {
     this.keys = { left: ds.u16(0x9fdc), right: ds.u16(0x9fde), thrust: ds.u16(0x9fe0), fire: ds.u16(0x9fe2), up: ds.u16(0x9fe4), down: ds.u16(0x9fe6) };
     this.x = 0x80; this.y = 0x80; this.turnRate = 0;
     this.repeat = 0; this.repeatAcc = 0;
-    this.mouse = { x: 0x80, y: 0x80, buttons: 0, pressed: [0, 0] };
+    // mouse position as int 33h reports it (range 0..0xFF on both axes, set by sub_7C7F)
+    this.mouse = { x: 0x80, y: 0x80, buttons: 0, down: 0, pressed: [0, 0] };
+    // mouse options (sub_A056): speeds [0xA002],[0xA004] 0..0x32, reverse height [0x9FFE], swap buttons [0xA000]
+    this.mouseSpeed = [ds.u16(0xa002), ds.u16(0xa004)];
+    this.invertY = ds.u16(0x9ffe) !== 0;
+    this.swapButtons = ds.u16(0xa000) !== 0;
+  }
+
+  /**
+   * sub_7CD0 passes speed+25 to int 33h function 1Ah, whose default is 50.
+   * Treated as a linear multiplier of the default rate.
+   */
+  mouseScale(axis) { return (this.mouseSpeed[axis] + 0x19) / 50; }
+
+  /** Buttons as int 33h function 3 reports them (a press between two polls still counts). */
+  mouseButtons() {
+    const m = this.mouse, b = m.buttons | m.down;
+    m.down = 0;
+    return b;
+  }
+
+  /** sub_9E12: menu pointer (height never reversed), clamped to the 256x128 window. */
+  pointer() {
+    const m = this.mouse;
+    return { x: Math.min(m.x | 0, 0xf0), y: Math.min(m.y | 0, 0x70), buttons: this.mouseButtons() & 3 };
   }
 
   reset() { this.x = 0x80; this.y = 0x80; this.turnRate = 0; }
@@ -46,12 +70,18 @@ export class Controls {
     input.thrustLatch = kb.take(k.thrust);
   }
 
-  /** sub_7BDB: mouse X steers, mouse Y sets altitude, buttons thrust/fire. */
+  /** sub_7BDB: mouse X steers, mouse Y sets altitude, left button thrust, right button fire. */
   readMouse(input) {
     const m = this.mouse;
-    input.x = m.x & 0xff; input.y = m.y & 0xff;
-    input.buttons = m.buttons;
+    input.x = m.x & 0xff;
+    input.y = this.invertY ? 0xff - (m.y & 0xff) : m.y & 0xff;
+    let buttons = this.mouseButtons();
     input.fireLatch = m.pressed[0]; input.thrustLatch = m.pressed[1];
     m.pressed[0] = m.pressed[1] = 0;
+    if (this.swapButtons) {
+      [input.fireLatch, input.thrustLatch] = [input.thrustLatch, input.fireLatch];
+      buttons = ((buttons & 1) << 1) | ((buttons & 2) >> 1);
+    }
+    input.buttons = buttons;
   }
 }

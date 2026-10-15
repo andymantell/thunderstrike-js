@@ -70,6 +70,8 @@ same integer arithmetic, so behaviour matches the DOS game.
 - Line drawing (HUD lines, graphs) uses a standard Bresenham line rather than the original routine.
 - The music driver's pitch depends on how fast the original PC ran its synthesis loop. A period machine is
   assumed (`LOOP_RATE` in `src/audio/music.js`).
-- Mouse sensitivity sliders and the joystick calibration screens are not reproduced. Keyboard and mouse
-  control are.
+- Mouse speed is passed to the DOS mouse driver (int 33h function 1Ah), whose exact response curve is not
+  known; the port scales pointer movement linearly. Until the pointer is locked to the page (click the
+  game), the mouse position maps directly onto the cockpit window.
+- The joystick calibration screens are not reproduced. Keyboard and mouse control are.
 - Only the VGA version is ported. The EGA and CGA drivers in the executable are not.

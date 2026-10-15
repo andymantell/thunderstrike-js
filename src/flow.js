@@ -287,6 +287,7 @@ export class Flow {
   /** sub_A2B0: Esc in the arena. Returns true when the game is abandoned. */
   *abortMenu() {
     const items = [[0xbbbd, 0], [0xbbcc, 0x40], [0xbbdb, 0x80]];
+    this.menuReady = false;
     for (;;) {
       this.menuPicture(items);
       const si = yield* this.menuSelect();
@@ -315,6 +316,7 @@ export class Flow {
     const items = [[0xbb68, 0], [0xbb77, 0x40], [0xbb86, 0x80], [0xbb95, 0xc0]];
     let idle = 0;
     this.menuPicture(items);
+    this.menuReady = false;
     for (;;) {
       const si = yield* this.menuSelect(() => ++idle > 0x258);
       if (si === 0) {
@@ -329,27 +331,40 @@ export class Flow {
     }
   }
 
+  /** sub_9E12 + blit + sub_9E57: show the work buffer with the pointer on it; returns the pointer. */
+  pointer() {
+    const p = this.app.controls.pointer();
+    this.display.blitWithPointer(p.x, p.y);
+    return p;
+  }
+
+  get mouseMode() { return this.app.controls.mode === 'mouse'; }
+
   /**
-   * sub_A4DB: menu choice from the keyboard (Esc=0, F1..F3=1..3, fire=4) or
-   * a mouse click on one of the 64x24 buttons at y=0x60.
+   * sub_A4DB: menu choice from the keyboard (Esc=0, F1..F3=1..3, fire=4 with
+   * the keyboard) or a mouse click on one of the 64x24 buttons at y=0x60.
+   * A choice only counts if nothing was pressed at the previous poll
+   * ([0xC67C], shared with the mouse options screen).
    */
   *menuSelect(onIdle) {
     let result = -1;
     this.kb.clearLatches();
     yield () => {
+      const p = this.mouseMode ? this.pointer() : null;
       const c = u8(-this.inkey());
-      if (c === 2) result = 0;
-      else if (c >= 0xb && c <= 0xd) result = c - 0xa;
-      else if (c === 0x63) result = 4;
-      const m = this.app.controls.mouse;
-      if (this.app.controls.mode === 'mouse' && m.clicked) {
-        m.clicked = false;
-        const x = m.screenX, y = m.screenY;
-        if (y >= 0x61 && y <= 0x76 && (x & 0x3f) >= 2 && (x & 0x3f) <= 0x3d) result = x >> 6;
+      let r = -1;
+      if (c === 2) r = 0;
+      else if (c >= 0xb && c <= 0xd) r = c - 0xa;
+      else if (!p && c === 0x63) r = 4;
+      if (p) {
+        if (p.buttons) r = r < 0 ? -2 : r;
+        const sx = p.x & 0x3f;
+        if (r < 0 && p.buttons && p.y >= 0x61 && p.y <= 0x76 && sx >= 2 && sx <= 0x3d) r = p.x >> 6;
       }
+      result = this.menuReady ? r : -1;
+      this.menuReady = r === -1;
       return result >= 0 || (onIdle ? onIdle() : false);
     };
-    yield () => this.inkey() === 0;
     return result;
   }
 
@@ -375,6 +390,7 @@ export class Flow {
   *optionsMenu() {
     const mouse = this.app.controls.mode === 'mouse';
     const items = [[0xbc4c, 0], [mouse ? 0xbc6a : 0xbc5b, 0x40], [0xbc79, 0x80]];
+    this.menuReady = false;
     for (;;) {
       this.menuPicture(items);
       const si = yield* this.menuSelect();
@@ -415,13 +431,65 @@ export class Flow {
     yield 25;
   }
 
-  /** sub_A056 (mouse mode): the original offers sensitivity sliders; we keep the defaults. */
+  /**
+   * sub_A056 (mouse mode): two speed sliders and two check boxes, worked
+   * with the pointer. Clicking below the boxes (y > 0x60) leaves.
+   */
   *mouseSettings() {
-    const d = this.display;
+    const d = this.display, w = d.work, c = this.app.controls;
+    const sliders = [{ x: 0x8c, y: 0x20 }, { x: 0x8c, y: 0x30 }];
+    const boxes = [
+      { x: 0x8c, y: 0x40, get: () => c.invertY, toggle: () => { c.invertY = !c.invertY; } },
+      { x: 0x8c, y: 0x50, get: () => c.swapButtons, toggle: () => { c.swapButtons = !c.swapButtons; } },
+    ];
+    const MAX = 0x32;
+    // sub_B124: rectangle outline
+    const rect = (x0, y0, x1, y1, col) => { w.line(x0, y0, x1, y0, col); w.line(x1, y0, x1, y1, col); w.line(x1, y1, x0, y1, col); w.line(x0, y1, x0, y0, col); };
+    // sub_B05A: slider box, end ticks and the marker
+    const slider = (i, on) => {
+      const { x, y } = sliders[i];
+      rect(x, y, x + 0x3f, y + 0xc, 2 & on);
+      w.line(x + 0xb, y, x + 0xb, y + 0xc, 2 & on);
+      w.line(x + 0x34, y, x + 0x34, y + 0xc, 2 & on);
+      const mx = x + Math.trunc(((c.mouseSpeed[i] + 1) << 5) / MAX) + 0xc;
+      rect(mx, y + 1, mx + 7, y + 0xb, 0xa & on);
+    };
+    // sub_A898: check box, crossed when set
+    const box = (i, on) => {
+      const { x, y } = boxes[i];
+      rect(x, y, x + 9, y + 9, 2 & on);
+      if (boxes[i].get()) { w.line(x, y, x + 9, y + 9, 2 & on); w.line(x, y + 9, x + 9, y, 2 & on); }
+    };
     d.clear();
-    d.print(4, 0, 1, this.ds.cstr(0xae24));
-    d.blit();
-    yield* this.pause(5, 0x1f4);
+    d.print(4, 0, 1, this.ds.cstr(this.ds.u16(0xae24)));
+    for (let i = 0; i < 2; i++) slider(i, 0xff);
+    for (let i = 0; i < 2; i++) box(i, 0xff);
+    let done = false;
+    this.menuReady = false;
+    yield () => {
+      const p = this.pointer();
+      if (p.buttons) {
+        // sub_A70A: sliders follow a held button, boxes toggle on a new click
+        sliders.forEach((s, i) => {
+          if (p.x < s.x || p.y < s.y || p.x >= s.x + 0x40 || p.y >= s.y + 0xc) return;
+          slider(i, 0);
+          const dx = p.x - s.x;
+          let v = c.mouseSpeed[i];
+          if (dx <= 0xc) v--;
+          else if (dx >= 0x34) v++;
+          else v = Math.trunc((MAX * (dx - 0x10)) / 0x20) - 1;
+          c.mouseSpeed[i] = Math.max(0, Math.min(MAX, v));
+          slider(i, 0xff);
+        });
+        if (this.menuReady) boxes.forEach((b, i) => {
+          if (p.x < b.x || p.y < b.y || p.x >= b.x + 0xa || p.y >= b.y + 0xa) return;
+          box(i, 0); b.toggle(); box(i, 0xff);
+        });
+        if (this.menuReady && p.y > 0x60) done = true;
+      }
+      this.menuReady = !p.buttons;
+      return done;
+    };
   }
 
   /** sub_A14B: information page. */

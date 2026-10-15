@@ -23,6 +23,29 @@ export class Display {
   blit() { this.app.showBuffer(this.work); }
 
   /**
+   * sub_660C / sub_6667: the mouse pointer. Pixels where the AND mask
+   * (DS:0x8D7E, 16x16) is clear become 0, then the image plane (DS:0x8D9E)
+   * XORs colour 0xF in. Shown with blit() and taken away again so the work
+   * buffer is left as it was.
+   */
+  blitWithPointer(x, y) {
+    const w = this.work, ds = this.ds, saved = [];
+    for (let r = 0; r < 16; r++) {
+      const mask = (ds.u8(0x8d7e + r * 2) << 8) | ds.u8(0x8d7f + r * 2);
+      const img = (ds.u8(0x8d9e + r * 2) << 8) | ds.u8(0x8d9f + r * 2);
+      for (let c = 0; c < 16; c++) {
+        const i = ((y + r) * 256 + x + c) & 0x7fff;
+        saved.push(w.d[i]);
+        const bit = 0x8000 >> c;
+        w.d[i] = ((mask & bit) ? w.d[i] : 0) ^ ((img & bit) ? 0xf : 0);
+      }
+    }
+    this.blit();
+    let k = 0;
+    for (let r = 0; r < 16; r++) for (let c = 0; c < 16; c++) w.d[((y + r) * 256 + x + c) & 0x7fff] = saved[k++];
+  }
+
+  /**
    * sub_8DF1: load a 256-wide picture at (x, y). `offset` is added to every
    * non-zero pixel and to the palette start (0xEC moves pictures 20 colours
    * down, clear of the cockpit palette). One-colour palettes are not loaded.

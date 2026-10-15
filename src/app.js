@@ -45,14 +45,19 @@ export class App {
   }
 
   setupMouse() {
-    const m = this.controls.mouse;
-    this.canvas.addEventListener('pointerdown', (e) => {
-      if (this.controls.mode === 'mouse' && document.pointerLockElement !== this.canvas) this.canvas.requestPointerLock?.();
+    const c = this.controls, m = c.mouse;
+    const locked = () => document.pointerLockElement === this.canvas;
+    // Without pointer lock the mouse maps directly onto the 256x128 window, as the menus show it.
+    const absolute = (e) => {
       const r = this.canvas.getBoundingClientRect();
-      const sx = ((e.clientX - r.left) / r.width) * 320, sy = ((e.clientY - r.top) / r.height) * 200;
-      m.screenX = Math.floor(sx - 32); m.screenY = Math.floor(sy - 16); m.clicked = true;
-      if (e.button === 0) { m.buttons |= 1; m.pressed[1] = 1; }
-      if (e.button === 2) { m.buttons |= 2; m.pressed[0] = 1; }
+      m.x = Math.max(0, Math.min(255, Math.floor(((e.clientX - r.left) / r.width) * 320) - 32));
+      m.y = Math.max(0, Math.min(255, Math.floor(((e.clientY - r.top) / r.height) * 200) - 16));
+    };
+    this.canvas.addEventListener('pointerdown', (e) => {
+      if (!locked()) absolute(e);
+      if (c.mode === 'mouse' && !locked()) this.canvas.requestPointerLock?.();
+      if (e.button === 0) { m.buttons |= 1; m.down |= 1; m.pressed[1] = 1; }
+      if (e.button === 2) { m.buttons |= 2; m.down |= 2; m.pressed[0] = 1; }
     });
     window.addEventListener('pointerup', (e) => {
       if (e.button === 0) m.buttons &= ~1;
@@ -60,9 +65,9 @@ export class App {
     });
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('pointermove', (e) => {
-      if (document.pointerLockElement !== this.canvas) return;
-      m.x = Math.max(0, Math.min(255, m.x + e.movementX / 2));
-      m.y = Math.max(0, Math.min(255, m.y + e.movementY / 2));
+      if (!locked()) { if (e.target === this.canvas) absolute(e); return; }
+      m.x = Math.max(0, Math.min(255, m.x + (e.movementX / 2) * c.mouseScale(0)));
+      m.y = Math.max(0, Math.min(255, m.y + (e.movementY / 2) * c.mouseScale(1)));
     });
   }
 
