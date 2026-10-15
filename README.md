@@ -32,15 +32,19 @@ Default keys (redefinable from Options, as in the original):
 | F4 | round, arena and game statistics |
 | F10 | pause (Q steps one frame while paused) |
 
-Use the **Settings** button to switch to mouse control, pick the graphics mode or set the volume. All three
-graphics modes play exactly the same game (the game itself always runs at its original 10 frames a second):
+Use the **Settings** button to switch to mouse control, pick the graphics mode or set the volume. The two
+original modes play exactly the original game, which runs at 10 frames a second; Enhanced 3D runs it faster:
 
 - **Original**: the original's own frames, pixel for pixel.
 - **Original, smooth**: the original's pixel-exact renderer, drawing in-between frames at the screen's refresh
   rate (for example 120 fps). Moving things are blended between game frames, which shows the picture one game
   frame (0.1 s) late.
-- **Enhanced 3D**: the same scene drawn by three.js as real 3D at screen resolution, smooth as above. The
-  land reaches three times as far as the original's (48 cells instead of 16), fading into the distance.
+- **Enhanced 3D**: the scene drawn by three.js as real 3D at screen resolution. The land reaches three times
+  as far as the original's (48 cells instead of 16), fading into the distance. The game runs at 50 passes a
+  second instead of 10: the craft, the camera and everything's movement advance every pass, so the controls
+  answer within 20 ms. What the original decides once a frame (enemy behaviour and its random numbers,
+  waves, timers, collisions) still happens ten times a second, so the game plays the same, though not
+  move for move: the craft handles a little more smoothly, which changes what it hits and when.
 
 The menus can be clicked with the mouse in either control mode.
 
@@ -73,6 +77,7 @@ Actions**.
 | `src/render/scene.js` | `sub_1BFA`, `sub_3D32`, `sub_1D2B`, `sub_15A2`, `sub_4143` | the original view-space maths and painter's draw order |
 | `src/render/pipeline.js` | `sub_43C5`, `sub_4770`, `sub_08EE`, `sub_6870`, `sub_6A64`, `sub_5E22` | the original's polygon pipeline: near clip, integer projection, screen clip and edge walkers, giving the exact pixel runs of every face |
 | `src/render/smooth.js`, `src/render/modern.js` | | in-between frames for the smooth modes, and the floating-point scene for enhanced 3D |
+| `src/game/fast.js` | | enhanced 3D's faster game: five passes of movement for each of the original's frames |
 | `src/render/renderer.js` | VGA output | three.js draws those runs in the original order into a 256x128 colour-index target; a final pass composes the 320x200 screen through the VGA palette |
 | `src/render/hud.js` | `sub_0D6D`, `sub_0F4E`, `sub_62BE` | messages, scanner, arena map, gauges, counters |
 | `src/flow.js` | front end `0x9D0B-0xBFFF` | title, attract mode, presenter, menus, craft selection, briefings, results, game over |

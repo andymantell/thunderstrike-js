@@ -57,25 +57,29 @@ export class Controls {
     if (this.mode === 'mouse') { this.mouse.x = 0x80; this.mouse.y = 0x80; }
   }
 
-  /** Called once per game frame (the original reads controls at the start of the player update). */
-  read(input) {
+  /**
+   * Called once per game frame (the original reads controls at the start of
+   * the player update). The enhanced mode's faster game reads them each pass
+   * with `part` the fraction of a frame, so the keyboard axes move that much.
+   */
+  read(input, part = 1) {
     if (this.mode === 'mouse') return this.readMouse(input);
-    const kb = this.kb, k = this.keys;
-    if (kb.held(k.left)) this.turnRate = -0x1f;
-    else if (kb.held(k.right)) this.turnRate = 0x1f;
+    const kb = this.kb, k = this.keys, step = 0x1f * part;
+    if (kb.held(k.left)) this.turnRate = -step;
+    else if (kb.held(k.right)) this.turnRate = step;
     else {
       this.turnRate = 0;
       // recentre by 0x1F a frame
-      if (this.steer > 0x80) { this.steer -= 0x1f; if (this.steer <= 0x80) this.steer = 0x80; }
-      else { this.steer += 0x1f; if (this.steer > 0x80) this.steer = 0x80; }
+      if (this.steer > 0x80) { this.steer -= step; if (this.steer <= 0x80) this.steer = 0x80; }
+      else { this.steer += step; if (this.steer > 0x80) this.steer = 0x80; }
     }
     this.steer = Math.max(0, Math.min(0xff, this.steer + this.turnRate));
     this.x = this.steer;
     const up = kb.held(k.up), down = kb.held(k.down);
     if (up || down) {
       this.repeat = 0; this.repeatAcc = 0;
-      if (up) this.y = Math.max(0, this.y - 0x10);
-      else this.y = Math.min(0xff, this.y + 0x10);
+      if (up) this.y = Math.max(0, this.y - 0x10 * part);
+      else this.y = Math.min(0xff, this.y + 0x10 * part);
     }
     let buttons = 0;
     if (kb.held(k.thrust)) buttons |= 1;

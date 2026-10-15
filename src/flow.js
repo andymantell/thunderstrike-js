@@ -10,6 +10,7 @@
  * files; DS offsets below point at the original strings.
  */
 import { Arena, approach } from './game/arena.js';
+import { FastGame, PASSES } from './game/fast.js';
 import { T } from './game/objects.js';
 import { SceneBuilder } from './render/scene.js';
 import { ModernSceneBuilder } from './render/modern.js';
@@ -37,7 +38,8 @@ export class Flow {
     this.hud = new Hud(app.data);
     this.display = new Display(app);
     this.arena = new Arena(app.data, app.speaker);
-    this.arena.onControllerReset = () => app.controls.reset();
+    this.fast = new FastGame(this.arena);           // the enhanced mode's faster game
+    this.arena.onControllerReset = () => { app.controls.reset(); this.fast.reset(); };
     this.craftSlot = this.ds.u16(0x4286) >> 1;   // [0x4286] = slot * 2 (craft 2 until one is chosen)
     this.firstIntro = true;        // [0xAE0C]
     this.pauseToggle = 0x80;       // toggle bit for F10 (DS:0x9ED0)
@@ -184,18 +186,33 @@ export class Flow {
   }
 
   *arenaLoop() {
-    const app = this.app, g = this.arena;
+    const app = this.app, g = this.arena, fast = this.fast;
     this.applyArenaLook();
     app.frameTicks = 0;
+    fast.reset();
+    let wasQuick = false;
     for (;;) {
-      yield () => app.frameTicks >= 5;
+      // enhanced mode runs the faster game: a pass every timer tick, deciding every fifth
+      yield () => app.frameTicks >= (this.renderMode === 'enhanced' ? 1 : PASSES);
       app.frameTicks = 0;
+      const quick = this.renderMode === 'enhanced';
+      if (quick !== wasQuick) {
+        if (fast.k) while (fast.k < PASSES) fast.move();   // finish the frame being handed out
+        fast.reset(); this.smoother.reset();
+        wasQuick = quick;
+      }
+      if (quick && fast.k > 0 && fast.k < PASSES) {
+        this.readControls(true);
+        fast.move();
+        app.speaker.flush();
+        this.smoother.record(g, performance.now(), 1000 / 50);
+        continue;
+      }
       if (this.kb.take(SC_F4) && !g.roundOver) yield* this.statsOverlay();   // 11ee
       // 2927 jumps to 29a0 and returns into this frame, which then carries on as normal
       if (this.checkCheat()) { g.nextRound(); yield* this.roundIntro(); this.applyArenaLook(); }
-      app.controls.read(g.input);
-      g.input.refuel = this.kb.held(0x43);
-      const ev = g.step();
+      this.readControls(quick);
+      const ev = quick ? fast.decide() : g.step();
       if (ev === 'cleared') {
         yield* this.roundComplete();     // 2b24 -> a9fb
         g.rechargeShield();              // 273
@@ -203,21 +220,31 @@ export class Flow {
         g.nextRound();                   // 29a0
         yield* this.roundIntro();
         this.applyArenaLook();
-        app.controls.read(g.input);      // 2435 reads the (recentred) controls
-        g.finishFrame();                 // back in the main loop after 1efc
+        this.readControls(quick);        // 2435 reads the (recentred) controls
+        if (quick) fast.finish();
+        else g.finishFrame();            // back in the main loop after 1efc
       }
       if (ev === 'shutdown') { yield* this.gameOver(0x102a, this.data.images.SHTDWNV); return; }
       if (ev === 'destroyed') { yield* this.gameOver(0x1090, this.data.images.EXPLODEV); return; }
+      if (quick) fast.move();
       // F10 pause, Q single-steps while paused (23ab)
       if (this.kb.take(SC_F10)) this.pauseToggle ^= 0x80;
       if (!(this.pauseToggle & 0x80)) yield () => this.kb.held(SC_Q) || (this.kb.take(SC_F10) && (this.pauseToggle ^= 0x80, true));
-      this.renderFrame();
+      this.renderFrame(quick ? 1000 / 50 : 100);
       if (this.kb.held(SC_ESC)) {
         const quit = yield* this.abortMenu();          // a2b0
         if (quit) return;
         this.applyArenaLook();
       }
     }
+  }
+
+  /** The controls for this frame, or for this pass of the faster game. */
+  readControls(quick) {
+    const g = this.arena;
+    this.app.controls.read(g.input, quick ? 1 / PASSES : 1);
+    g.input.refuel = this.kb.held(0x43);
+    if (quick) this.fast.take(g.input);
   }
 
   /** Sky, base palette and panel counters for the current arena (sub_61AD and friends). */
@@ -230,7 +257,7 @@ export class Flow {
     app.show3D();
   }
 
-  renderFrame() {
+  renderFrame(period = 100) {
     const app = this.app, g = this.arena;
     app.speaker.flush();                                   // 82a6
     g.hudPhase();
@@ -240,7 +267,7 @@ export class Flow {
     if (this.renderMode === 'original') app.renderer.setPrimitives(prims, g.groundColour ?? 0, 'sky');
     this.hud.draw(g, this.scene, app.view, app.screen, () => app.speaker.request(0x0764));
     this.hud.counters(g, app.screen);
-    this.smoother.record(g, performance.now());
+    this.smoother.record(g, performance.now(), period);
   }
 
   /**
@@ -252,7 +279,7 @@ export class Flow {
     const on = this.inPlay && this.renderMode !== 'original' && r.mode === 1;
     r.enhanced = on && this.renderMode === 'enhanced';
     if (!on || !this.frameStart) return;
-    const t = Math.min(1, Math.max(0, (now - this.smoother.time) / 100));
+    const t = Math.min(1, Math.max(0, (now - this.smoother.time) / this.smoother.period));
     const smooth = this.renderMode === 'smooth';
     const v = this.smoother.view(t, smooth);
     if (!v) return;

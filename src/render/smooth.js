@@ -24,10 +24,11 @@ const lerpByte = (a, b, t) => { const d = ((b - a + 0x80) & 0xff) - 0x80; return
 const mod = (v, m) => ((v % m) + m) % m;
 
 export class Smoother {
-  constructor() { this.prev = null; this.curr = null; this.time = 0; }
+  constructor() { this.prev = null; this.curr = null; this.time = 0; this.period = 100; }
 
-  /** After each game frame. */
-  record(g, now) {
+  /** After each game frame, which lasts `period` ms (the enhanced mode's faster game: 20). */
+  record(g, now, period = 100) {
+    this.period = period;
     this.prev = this.curr ?? snapshot(g);
     this.curr = snapshot(g);
     this.time = now;
