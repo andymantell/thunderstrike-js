@@ -12,6 +12,7 @@ export class Controls {
     // default key scancodes DS:0x9FDC: left, right, thrust, fire, up, down
     this.keys = { left: ds.u16(0x9fdc), right: ds.u16(0x9fde), thrust: ds.u16(0x9fe0), fire: ds.u16(0x9fe2), up: ds.u16(0x9fe4), down: ds.u16(0x9fe6) };
     this.x = 0x80; this.y = 0x80; this.turnRate = 0;
+    this.steer = 0x80;   // [0x9FF2] keyboard steering accumulator; [0x9FEA] (x) is what the game reads
     this.repeat = 0; this.repeatAcc = 0;
     // mouse position as int 33h reports it (range 0..0xFF on both axes, set by sub_7C7F)
     this.mouse = { x: 0x80, y: 0x80, buttons: 0, down: 0, pressed: [0, 0] };
@@ -42,7 +43,7 @@ export class Controls {
 
   /** [0x9FFC]: sub_7F29 centres the keyboard axes; sub_7C7F puts the mouse back at (0x80, 0x80). */
   reset() {
-    this.x = 0x80; this.y = 0x80; this.turnRate = 0;
+    this.x = 0x80; this.y = 0x80;      // not [0x9FF2]: steering keeps its lean
     if (this.mode === 'mouse') { this.mouse.x = 0x80; this.mouse.y = 0x80; }
   }
 
@@ -55,11 +56,11 @@ export class Controls {
     else {
       this.turnRate = 0;
       // recentre by 0x1F a frame
-      if (this.x > 0x80) { this.x -= 0x1f; if (this.x <= 0x80) this.x = 0x80; }
-      else { this.x += 0x1f; if (this.x > 0x80) this.x = 0x80; }
+      if (this.steer > 0x80) { this.steer -= 0x1f; if (this.steer <= 0x80) this.steer = 0x80; }
+      else { this.steer += 0x1f; if (this.steer > 0x80) this.steer = 0x80; }
     }
-    let x = this.x + this.turnRate;
-    this.x = Math.max(0, Math.min(0xff, x));
+    this.steer = Math.max(0, Math.min(0xff, this.steer + this.turnRate));
+    this.x = this.steer;
     const up = kb.held(k.up), down = kb.held(k.down);
     if (up || down) {
       this.repeat = 0; this.repeatAcc = 0;

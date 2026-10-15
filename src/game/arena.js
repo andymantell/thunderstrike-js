@@ -179,12 +179,19 @@ export class Arena {
 
   /**
    * Logic half of one frame. Returns 'cleared', 'shutdown' or 'destroyed'
-   * when the round ends.
+   * when the round ends. After 'cleared' the original shows the results and
+   * sets up the next round from inside sub_1EFC, then finishes the frame:
+   * the caller does the same and then calls finishFrame().
    */
   step() {
     this.frame++;
     const ev = this.checkRoundEnd();    // 1efc
     if (ev) return ev;
+    return this.finishFrame();
+  }
+
+  /** The rest of the frame after sub_1EFC. */
+  finishFrame() {
     this.warnings();                    // 06ff
     if (this.dying === 0) this.spawnWaves();   // 3090
     this.sampleGround();                // 14ae

@@ -179,11 +179,11 @@ export class Flow {
         yield* this.roundComplete();     // 2b24 -> a9fb
         g.rechargeShield();              // 273
         this.kb.clearLatches();
-        g.nextRound();
+        g.nextRound();                   // 29a0
         yield* this.roundIntro();
         this.applyArenaLook();
-        app.frameTicks = 0;
-        continue;
+        app.controls.read(g.input);      // 2435 reads the (recentred) controls
+        g.finishFrame();                 // back in the main loop after 1efc
       }
       if (ev === 'shutdown') { yield* this.gameOver(0x102a, this.data.images.SHTDWNV); return; }
       if (ev === 'destroyed') { yield* this.gameOver(0x1090, this.data.images.EXPLODEV); return; }
