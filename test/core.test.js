@@ -5,6 +5,7 @@ import { imulHi, s16, u16 } from '../src/core/int.js';
 import { unpackRle } from '../src/data/igr.js';
 import { gameFiles } from './helpers.js';
 import { loadGameData } from '../src/data/loader.js';
+import { pitchTable } from '../src/audio/music.js';
 
 test('RNG follows s = s*5 + 0x65 (sub_8134)', () => {
   const r = new Rng();
@@ -42,5 +43,16 @@ test('trig tables behave like sine and arctangent', { skip }, () => {
   for (const [v, a] of [[100, 0x20], [-50, 0x60], [77, 0xa0], [-127, 0xe0]]) {
     const want = Math.round(v * Math.sin((a * Math.PI) / 128));
     assert.ok(Math.abs(t.sinMulB(v, a) - want) <= 1, `sinMul(${v}, ${a})`);
+  }
+});
+
+test('the music driver builds an equal-tempered note table (MZ.DAT:0x00FE)', { skip }, () => {
+  const mz = loadGameData(files).mz;
+  // same pitches whatever the measured loop rate
+  for (const rate of [20000, 110000, 400000]) {
+    const t = pitchTable(mz, rate);
+    const hz = (i) => ((t[0x4c0 + i * 3] | (t[0x4c1 + i * 3] << 8) | (t[0x4c2 + i * 3] << 16)) / 2 ** 24) * rate;
+    for (let i = 1; i < 84; i++) assert.ok(Math.abs(hz(i) / hz(i - 1) - 2 ** (1 / 12)) < 0.01, `step ${i}`);
+    assert.ok(Math.abs(hz(80) - 3918) < 15, `A at ${hz(80)}`);
   }
 });

@@ -5,10 +5,13 @@
  * The original bit-bangs the speaker from a tight loop that advances three
  * 24-bit phase accumulators and outputs, for each voice in turn,
  * (phase >> 16) < duty. A 54.6 Hz timer (PIT divisor 0x5555) runs the
- * sequencer. Because the synthesis loop runs as fast as the CPU allows,
- * pitch depends on the machine; LOOP_RATE models a period PC.
+ * sequencer. The synthesis loop runs as fast as the CPU allows; LOOP_RATE
+ * models a period PC (it changes only the grain of the pulse widths).
  *
- * Note pitches are read from MZ.DAT:0x4C0 exactly as the driver does.
+ * Selecting a tune (MZ.DAT:0x5A) first times the synthesis loop over one
+ * 65536-count timer period and rebuilds the note table at 0x4C0..0x5BB
+ * (over the credit text) from the twelve semitone steps at 0x48A, so the
+ * notes come out at the same pitch whatever the CPU speed.
  */
 const LOOP_RATE = 110000;
 const SEQ_HZ = 1193182 / 0x5555;
@@ -128,9 +131,33 @@ class MzMusic extends AudioWorkletProcessor {
 registerProcessor('mz-music', MzMusic);
 `;
 
+/**
+ * MZ.DAT:0x00D6-0x012B: bp = synthesis loops in one 65536-count timer period,
+ * bx = 0x1000000 / bp; each semitone step times bx, shifted down 8 bits, is
+ * the 24-bit phase increment for the top octave, halved for each of the six
+ * octaves below it (0x24 bytes lower each).
+ */
+export function pitchTable(mz, loopRate = LOOP_RATE) {
+  const out = new Uint8Array(mz);
+  const bp = Math.round((loopRate * 65536) / 1193182) & 0xffff;
+  const bx = Math.floor(0x1000000 / bp) & 0xffff;
+  let di = 0x598;
+  for (let s = 0; s < 12; s++) {
+    const step = mz[0x48a + s * 2] | (mz[0x48b + s * 2] << 8);
+    let v = Math.floor((step * bx) / 256);          // dx:ah
+    for (let o = 0; o < 7; o++) {
+      out[di] = v & 0xff; out[di + 1] = (v >> 8) & 0xff; out[di + 2] = (v >> 16) & 0xff;
+      v >>>= 1;
+      di -= 0x24;
+    }
+    di += 0xff;
+  }
+  return out;
+}
+
 export class Music {
   constructor(mzBytes) {
-    this.mz = mzBytes;
+    this.mz = pitchTable(mzBytes);
     this.node = null;
     this.ready = null;
     this.playing = false;

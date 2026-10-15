@@ -67,8 +67,9 @@ same integer arithmetic, so behaviour matches the DOS game.
 
 - Polygons are rasterised by the GPU with standard three.js perspective projection. The original truncated
   screen coordinates in integer division, so edges can differ by a pixel.
-- The music driver's pitch depends on how fast the original PC ran its synthesis loop. A period machine is
-  assumed (`LOOP_RATE` in `src/audio/music.js`).
+- The music driver calibrates itself against the CPU, so pitch and tempo match the original on any machine,
+  but the grain of its pulse-width synthesis depends on how fast that loop ran. A period machine is assumed
+  (`LOOP_RATE` in `src/audio/music.js`).
 - Mouse speed is passed to the DOS mouse driver (int 33h function 1Ah), whose exact response curve is not
   known; the port scales pointer movement linearly. Until the pointer is locked to the page (click the
   game), the mouse position maps directly onto the cockpit window.
