@@ -316,7 +316,9 @@ function saboteur(g, s) {
       return;
     }
     o.model[s] = 2;
-    o.t1[s] = 0;
+    // 352F writes a word at the state byte: it also zeroes the next slot's timer byte
+    o.t1[s] = setHi(o.t1[s], 0);
+    o.t1[s + 1] = setLo(o.t1[s + 1], 0);
     t.destroyPyramid(o.link[s] >> 1, g);
     pick();
     state = hi(o.t1[s]);

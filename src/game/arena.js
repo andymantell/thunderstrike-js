@@ -43,7 +43,8 @@ export class Arena {
     this.round = 0;
     this.frame = 0;
     this.gauges = { shield: 0xffff, threat: 0xffff };  // [0x8C74],[0x8C78]
-    this.radarCount = 0xffff;                         // [0x195F]
+    this.radarCount = this.ds.u16(0x195f);            // [0x195F] objects on the scanner last frame
+    this.camAngle = this.ds.u8(0x6620);               // [0x6620] camera heading byte, kept apart from [0x6622]
     this.originCol = 0; this.originRow = 0; this.prevOrigin = 0;
   }
 
@@ -439,7 +440,7 @@ export class Arena {
     if (n > 7) n = 7;
     const k = this.ds.u8(0x6616 + n);
     const t = this.cameraTarget();
-    const cam = (this.camYaw >> 8) & 0xff;
+    const cam = this.camAngle;
     let signed = false;
     if ((cam ^ t) & 0x80) {
       let a = t, b = cam;
@@ -448,6 +449,7 @@ export class Arena {
     }
     if (!signed) this.camYaw = Math.floor((this.camYaw * k + (t << 8)) / (k + 1)) & 0xffff;
     else this.camYaw = Math.trunc((s16(this.camYaw) * k + s16(t << 8)) / (k + 1)) & 0xffff;
+    this.camAngle = this.camYaw >> 8;
   }
 
   /** sub_3CDE */
@@ -458,14 +460,14 @@ export class Arena {
     if (d > 0x1f) return p.yaw;
     const a = 0x1f - d;
     let bl = u8(a + p.yaw);
-    if (s8(((this.camYaw >> 8) & 0xff) - p.yaw) < 0) bl = u8(-a + p.yaw);
+    if (s8(this.camAngle - p.yaw) < 0) bl = u8(-a + p.yaw);
     return bl;
   }
 
   /** sub_3BF0 */
   updateCameraHeight() {
     const tb = this.tables, p = this.p, t = this.terrain;
-    const cam = (this.camYaw >> 8) & 0xff;
+    const cam = this.camAngle;
     const back = u8(cam + 0x80);
     const bx = u16(imulHi(tb.sinB(back), 0x12c0) + p.x);
     const bz = u16(imulHi(tb.cosB(back), 0x12c0) + p.z);

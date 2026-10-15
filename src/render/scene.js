@@ -41,7 +41,7 @@ export class SceneBuilder {
   /** sub_1BFA: rotate the 16x16 terrain window into view space. */
   buildGrid(g) {
     const tb = this.tables, map = g.terrain.map;
-    const ang = (g.camYaw >> 8) & 0xff;
+    const ang = g.camAngle;
     const sin = tb.sinB(ang), cos = tb.cosB(ang);
     const fx = (g.p.x >> 2) & 0xff, fz = (g.p.z >> 2) & 0xff;
     const originCol = ((g.p.x >> 10) - 8) & 0x3f;
@@ -78,7 +78,7 @@ export class SceneBuilder {
   /** sub_3D32: objects inside the window, transformed and depth sorted. */
   buildObjects(g) {
     const o = g.o, tb = this.tables;
-    const ang = (g.camYaw >> 8) & 0xff;
+    const ang = g.camAngle;
     const sin = tb.sinB(ang), cos = tb.cosB(ang);
     const list = [];
     for (let s = 0; s < 24; s++) {
@@ -87,7 +87,7 @@ export class SceneBuilder {
       const gzr = ((o.z[s] >> 10) - this.originRow) & 0x3f;
       if (gx & 0x30 || gzr & 0x30) continue;
       const j = (15 - gzr) & 0xff;
-      o.cell[s] = j * 16 + gx;
+      o.cell[s] = (j * 16 + gx) * 2;    // word offset, as stored at 0x907
       const dx = s16(o.x[s] - g.p.x), dz = s16(o.z[s] - g.p.z);
       const x = s16(Math.floor((dx * cos - dz * sin) / 16384));
       const z = s16(Math.floor((dx * sin + dz * cos) / 16384));
@@ -163,7 +163,7 @@ export class SceneBuilder {
   build(g) {
     this.buildGrid(g);
     this.buildObjects(g);
-    const camAngle = (g.camYaw >> 8) & 0xff;
+    const camAngle = g.camAngle;
     this.buildOrder(camAngle);
     const L = this.light(camAngle);
     this.animIndex = (this.animIndex + 1) & 0xf;
@@ -182,7 +182,7 @@ export class SceneBuilder {
       drawn[k] |= 0x80;
       drawn[prev] |= 0x40;
       prev = k;
-      while (pending < objs.length && (drawn[o.cell[objs[pending]]] & 0x40)) {
+      while (pending < objs.length && (drawn[o.cell[objs[pending]] >> 1] & 0x40)) {
         this.object(g, objs[pending], L, prims);
         pending++;
       }
@@ -220,7 +220,7 @@ export class SceneBuilder {
     }
     const m = this.models.get(model & 0xffff);
     if (!m) return;
-    const camAngle = (g.camYaw >> 8) & 0xff;
+    const camAngle = g.camAngle;
     const yaw = u8(camAngle - o.yaw[s]);
     const pitch = o.pitch[s] & 0xff, roll = o.roll[s] & 0xff;
     const n = m.vertexCount;

@@ -594,7 +594,7 @@ export class Flow {
         }
       }
       const prims = [];
-      const cam = (g.camYaw >> 8) & 0xff;
+      const cam = g.camAngle;
       const draw = (i) => {
         const c = craft[i];
         o.vxv[slot] = u16(c.x); o.vyv[slot] = u16(c.y); o.vzv[slot] = u16(c.z);
