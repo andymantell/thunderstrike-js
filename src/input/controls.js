@@ -25,6 +25,10 @@ export class Controls {
     this.x = 0x80; this.y = 0x80; this.turnRate = 0;
     this.steer = 0x80;   // [0x9FF2] keyboard steering accumulator; [0x9FEA] (x) is what the game reads
     this.repeat = 0; this.repeatAcc = 0;
+    // the steering curve (sub_25C1's table at [0x3E16]) gives no turn across its middle; its edges
+    const curve = ds.u16(0x3e16);
+    this.deadLo = 0x80; while (this.deadLo > 0 && ds.u8(curve + this.deadLo - 1) === 0) this.deadLo--;
+    this.deadHi = 0x80; while (this.deadHi < 0xff && ds.u8(curve + this.deadHi + 1) === 0) this.deadHi++;
     // mouse position as int 33h reports it (range 0..0xFF on both axes, set by sub_7C7F)
     this.mouse = { x: 0x80, y: 0x80, buttons: 0, down: 0, pressed: [0, 0], seen: false };
     // mouse options (sub_A056): speeds [0xA002],[0xA004] 0..0x32, reverse height [0x9FFE], swap buttons [0xA000]
@@ -72,13 +76,25 @@ export class Controls {
    * Called once per game frame (the original reads controls at the start of
    * the player update). The enhanced mode's faster game reads them each pass
    * with `part` the fraction of a frame, so the keyboard axes move that much.
+   *
+   * `responsive` (the enhanced mode): the turn keys skip the curve's dead
+   * zone, which the original's stick has to cross a step a frame (0.3 s
+   * before a turn starts, 0.7 s to reverse one); letting go centres at once.
+   * The climb to full turn beyond it is the original's.
    */
-  read(input, part = 1) {
+  read(input, part = 1, responsive = false) {
     if (this.mode === 'mouse') return this.readMouse(input);
     const kb = this.kb, k = this.keys, step = 0x1f * part;
-    if (kb.held(k.left)) this.turnRate = -step;
-    else if (kb.held(k.right)) this.turnRate = step;
-    else {
+    if (kb.held(k.left)) {
+      this.turnRate = -step;
+      if (responsive) this.steer = Math.min(this.steer, this.deadLo);
+    } else if (kb.held(k.right)) {
+      this.turnRate = step;
+      if (responsive) this.steer = Math.max(this.steer, this.deadHi);
+    } else if (responsive) {
+      this.turnRate = 0;
+      this.steer = 0x80;
+    } else {
       this.turnRate = 0;
       // recentre by 0x1F a frame
       if (this.steer > 0x80) { this.steer -= step; if (this.steer <= 0x80) this.steer = 0x80; }

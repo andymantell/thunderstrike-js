@@ -242,7 +242,7 @@ export class Flow {
   /** The controls for this frame, or for this pass of the faster game. */
   readControls(quick) {
     const g = this.arena;
-    this.app.controls.read(g.input, quick ? 1 / PASSES : 1);
+    this.app.controls.read(g.input, quick ? 1 / PASSES : 1, quick);
     g.input.refuel = this.kb.held(0x43);
     if (quick) this.fast.take(g.input);
   }

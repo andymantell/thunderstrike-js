@@ -48,6 +48,9 @@ original modes play exactly the original game, which runs at 10 frames a second;
   answer within 20 ms. What the original decides once a frame (enemy behaviour and its random numbers,
   waves, timers, collisions) still happens ten times a second, so the game plays the same, though not
   move for move: the craft handles a little more smoothly, which changes what it hits and when.
+  Keyboard steering skips the original's dead zone: the turn keys work a virtual joystick that moves a step
+  a frame, and its middle 60% gives no turn, so in the original a turn starts 0.3 s after the key and
+  reversing one takes 0.7 s. Here it starts at once and letting go stops it.
 
 The menus can be clicked with the mouse in either control mode.
 
