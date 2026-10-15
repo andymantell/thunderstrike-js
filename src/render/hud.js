@@ -300,7 +300,7 @@ export class Hud {
     const o = g.o;
     for (let s = 0; s < 24; s++) {
       const c = ds.u8(0x190f + (o.type[s] & 0xff));
-      const col = (s === 0 || o.type[s] === 2) ? this.radarBlink : c;
+      const col = o.type[s] === 2 ? this.radarBlink : c;   // 0F4E blinks the table entry for type 2
       if (!col) continue;
       const x = (o.x[s] >> 8) >> 2, y = (((-(o.z[s] >> 8)) & 0xff) >> 2);
       view.plot(x + 0xc0, y + 0x40, col);
