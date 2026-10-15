@@ -6,13 +6,13 @@
  *   sx = 128 + 100*X/(Z+400), sy = 64 - 100*Y/(Z+400) onto a 256x128 view.
  *
  * Output is a list of primitives in painter's order:
- *   { kind: 'poly', colour, pts: [[x,y,z], ...] }   filled flat polygon
- *   { kind: 'spans', colour, z, top, rows: [[x0, x1], ...] }
- *                                                   particle (shots, explosions), already in screen
- *                                                   pixels: rows from `top`, x0..x1 inclusive
+ *   { kind: 'runs', colour, runs: [[row, x0, x1], ...] }
+ *                                                   pixels of the 256x128 view, x0..x1 inclusive,
+ *                                                   worked out by the original's pipeline (pipeline.js)
  * The three.js renderer turns these into triangles drawn without a depth
  * buffer, so overlaps resolve exactly like the original painter's algorithm.
  */
+import { Pipeline } from './pipeline.js';
 import { u8, s8, u16, s16 } from '../core/int.js';
 
 const NEAR = -390;                  // 0xFE7A
@@ -32,6 +32,7 @@ export class SceneBuilder {
     this.vis = new Uint8Array(256);  // 0x31AE flags
     this.order = [];
     this.glowToggle = this.ds.u8(0x682e);   // [0x682E]
+    this.pipe = new Pipeline();
     this.animIndex = 0;              // [0x33AF]
   }
 
@@ -199,17 +200,29 @@ export class SceneBuilder {
     if (colour < 0x10) colour = 0;
     if (colour >= 0x70) colour = anim;
     const A = k, B = k + 1, C = k + 17, D = k + 16;
-    const v = this.vis;
+    const v = this.vis, pl = this.pipe;
     if (!(v[A] | v[B] | v[C] | v[D])) return;
-    const P = (i) => [this.gx[i], this.gy[i], this.gz[i]];
-    if (!(raw & 0x80)) { prims.push({ kind: 'poly', colour, pts: [P(A), P(B), P(C), P(D)] }); return; }
-    if (this.gy[A] === this.gy[C]) {
-      prims.push({ kind: 'poly', colour, pts: [P(A), P(B), P(D)] });
-      prims.push({ kind: 'poly', colour, pts: [P(B), P(C), P(D)] });
-    } else {
-      prims.push({ kind: 'poly', colour, pts: [P(A), P(B), P(C)] });
-      prims.push({ kind: 'poly', colour, pts: [P(A), P(C), P(D)] });
+    const push = (runs) => { if (runs) prims.push({ kind: 'runs', colour, runs }); };
+    const split = raw & 0x80, flat = this.gy[A] === this.gy[C];
+    if (v[A] & v[B] & v[C] & v[D]) {
+      // sub_16C0: all corners in front, drawn from the projected grid (sub_480C)
+      const S = (i) => this.screenVertex(i);
+      if (!split) push(pl.terrainVisible([S(A), S(B), S(C), S(D)]));
+      else if (!flat) { push(pl.terrainVisible([S(A), S(B), S(C)])); push(pl.terrainVisible([S(A), S(C), S(D)])); }
+      else { push(pl.terrainVisible([S(A), S(B), S(D)])); push(pl.terrainVisible([S(B), S(C), S(D)])); }
+      return;
     }
+    // sub_186D: some corners behind the near plane
+    const P = (i) => [this.gx[i], this.gy[i], this.gz[i]];
+    if (!split) push(pl.terrainPartial([P(A), P(B), P(C), P(D)]));
+    else if (!flat) { push(pl.terrainPartial([P(A), P(B), P(C)])); push(pl.terrainPartial([P(D), P(A), P(C)])); }
+    else { push(pl.terrainPartial([P(A), P(B), P(D)])); push(pl.terrainPartial([P(D), P(B), P(C)])); }
+  }
+
+  /** sub_480C: grid corner projected with truncating integer division. */
+  screenVertex(i) {
+    const d = 0x190 + this.gz[i];
+    return [s16(Math.trunc((this.gx[i] * 100) / d) + 0x80), s16(0x40 - Math.trunc((this.gy[i] * 100) / d))];
   }
 
   /**
@@ -258,7 +271,7 @@ export class SceneBuilder {
       if (right > 0xff) right = 0xff;
       rows.push([left, right]);
     }
-    return { kind: 'spans', colour, z: pz, top, rows };
+    return { kind: 'runs', colour, runs: this.pipe.particle(top, rows) };
   }
 
   /** sub_3EF3: one object's faces (VGA path at 0x4143) or particle (0x3FA9). */
@@ -295,8 +308,10 @@ export class SceneBuilder {
       let sh = s8(s8((vy[nv] * L[1]) >> 8) + s8((vx[nv] * L[0]) >> 8) + s8((vz[nv] * L[2]) >> 8));
       if (sh < -8) sh = -8;
       const colour = ((f.colour & 0xf0) + sh + 8) & 0xff;
-      if (f.idx.length >= 3 && !facesEye(vx, vy, vz, f.idx)) continue;
-      prims.push({ kind: 'poly', colour: this.glow(colour, g), pts: f.idx.map((i) => [vx[i], vy[i], vz[i]]) });
+      if (f.idx.length < 3 || !facesEye(vx, vy, vz, f.idx)) continue;
+      const runs = this.pipe.objectFace(f.idx.map((i) => [vx[i], vy[i], vz[i]]));
+      // sub_45BF sets the colour (and flips the glow) only for faces that are drawn
+      if (runs) prims.push({ kind: 'runs', colour: this.glow(colour, g), runs });
     }
   }
 }

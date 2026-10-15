@@ -1,8 +1,8 @@
 """Compare the pictures recorded with --pictures=N.
 
-The panel (VGA memory, 320x200) is compared pixel for pixel. In the 3D window
-the port draws the HUD on its own layer (0 = transparent) over a GPU-rendered
-view, so only the HUD pixels are compared there.
+The panel (VGA memory, 320x200) is compared pixel for pixel. The 3D window is
+compared whole: the HUD layer, and the view rebuilt from the port's pixel
+runs (raster.mjs paints them the way the GPU does).
 
 usage: python pictures.py orig.json port.json
 """
@@ -32,10 +32,11 @@ def main(a_file, b_file):
         hud = [(i % 256, i // 256) for i in range(256 * 128) if vb[i] and va[i] != vb[i]]
         fr = bytes.fromhex(y['frame']) if 'frame' in y else None
         same = sum(1 for i in range(256 * 128) if fr[i] == va[i]) if fr else 0
-        status = ('ok' if not panel and not hud else 'DIFFERENT') + (f'  3D view {100 * same / 32768:.1f}% same' if fr else '')
+        view = 32768 - same if fr else 0
+        status = ('ok' if not panel and not hud and not view else 'DIFFERENT') + (f'  3D view {view} px differ' if fr else '')
         if fr and '--dump' in sys.argv:
             write_ppm(f'{a_file}.{f}.ppm', va, fr)
-        if panel or hud:
+        if panel or hud or view:
             bad += 1
         print(f'frame {f}: panel {len(panel)} px differ {panel[:6]}, HUD {len(hud)} px differ {hud[:6]}  {status}')
     return bad

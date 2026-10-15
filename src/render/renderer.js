@@ -3,7 +3,8 @@
  *
  * The 3D view is rendered into an off-screen 256x128 target (optionally a
  * multiple of it) that stores VGA colour *indices*, exactly like the
- * original's off-screen buffer. A final pass composes the 320x200 screen
+ * original's off-screen buffer. The geometry arrives as the pixel runs the
+ * original's own pipeline produces, so three.js draws exactly its pixels. A final pass composes the 320x200 screen
  * from the cockpit panel, the 3D view at (32,16) and the HUD overlay, and
  * looks every pixel up in the current 256-colour palette, so palette
  * changes behave like writes to the VGA DAC.
@@ -11,7 +12,7 @@
 import * as THREE from 'three';
 
 const VIEW_W = 256, VIEW_H = 128;
-const MAX_VERTS = 24000;
+const MAX_VERTS = 6 * 40000;   // two triangles per pixel run
 
 export class Renderer {
   constructor(canvas, { scale = 1 } = {}) {
@@ -57,11 +58,9 @@ export class Renderer {
 
   makeViewScene() {
     this.viewScene = new THREE.Scene();
-    // Original projection: sx = 128 + 100*X/(Z+400), sy = 64 - 100*Y/(Z+400).
-    const fov = THREE.MathUtils.radToDeg(2 * Math.atan(64 / 100));
-    this.camera = new THREE.PerspectiveCamera(fov, 2, 10, 20000);
-    this.camera.position.set(0, 0, 400);
-    this.camera.lookAt(0, 0, 0);
+    // The original's pipeline (pipeline.js) has already worked out every pixel run, so the
+    // view is drawn in pixel coordinates: x 0..256 across, row r between y = -r and -(r + 1).
+    this.camera = new THREE.OrthographicCamera(0, VIEW_W, 0, -VIEW_H, -1, 1);
 
     // sky rows 0..63 use colours 0x80+row/2, rows 64..127 the arena ground colour
     this.bgMat = new THREE.ShaderMaterial({
@@ -80,17 +79,14 @@ export class Renderer {
     const geo = new THREE.BufferGeometry();
     this.pos = new Float32Array(MAX_VERTS * 3);
     this.ci = new Float32Array(MAX_VERTS);
-    this.disc = new Float32Array(MAX_VERTS * 3);
     geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
     geo.setAttribute('ci', new THREE.BufferAttribute(this.ci, 1).setUsage(THREE.DynamicDrawUsage));
-    geo.setAttribute('disc', new THREE.BufferAttribute(this.disc, 3).setUsage(THREE.DynamicDrawUsage));
     this.geo = geo;
     const mat = new THREE.ShaderMaterial({
-      vertexShader: `attribute float ci; attribute vec3 disc; varying float vCi; varying vec3 vDisc;
-        void main(){ vCi = ci; vDisc = disc; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-      fragmentShader: `varying float vCi; varying vec3 vDisc;
-        void main(){ if (vDisc.z > 0.5 && dot(vDisc.xy, vDisc.xy) > 1.0) discard;
-          gl_FragColor = vec4((vCi + 0.25) / 255.0, 0.0, 0.0, 1.0); }`,
+      vertexShader: `attribute float ci; varying float vCi;
+        void main(){ vCi = ci; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+      fragmentShader: `varying float vCi;
+        void main(){ gl_FragColor = vec4((vCi + 0.25) / 255.0, 0.0, 0.0, 1.0); }`,
       depthTest: false, depthWrite: false, side: THREE.DoubleSide,
     });
     this.mesh = new THREE.Mesh(geo, mat);
@@ -150,41 +146,28 @@ export class Renderer {
     this.palette.needsUpdate = true;
   }
 
-  /** Fill the dynamic mesh from SceneBuilder primitives (painter's order). */
+  /** Fill the dynamic mesh from SceneBuilder primitives (pixel runs, in painter's order). */
   setPrimitives(prims, groundColour, background = 'sky') {
     this.bgMat.uniforms.ground.value = groundColour;
     this.bgMat.uniforms.sky.value = background === 'sky' ? 1 : 0;
     this.dirty = true;
     let n = 0;
-    const put = (x, y, z, c, dx = 0, dy = 0, d = 0) => {
-      if (n >= MAX_VERTS) return;
-      this.pos[n * 3] = x; this.pos[n * 3 + 1] = y; this.pos[n * 3 + 2] = -z;
+    const put = (x, y, c) => {
+      this.pos[n * 3] = x; this.pos[n * 3 + 1] = y; this.pos[n * 3 + 2] = 0;
       this.ci[n] = c;
-      this.disc[n * 3] = dx; this.disc[n * 3 + 1] = dy; this.disc[n * 3 + 2] = d;
       n++;
     };
     for (const p of prims) {
-      if (p.kind === 'poly') {
-        const pts = p.pts;
-        for (let i = 1; i + 1 < pts.length; i++) {
-          put(pts[0][0], pts[0][1], pts[0][2], p.colour);
-          put(pts[i][0], pts[i][1], pts[i][2], p.colour);
-          put(pts[i + 1][0], pts[i + 1][1], pts[i + 1][2], p.colour);
-        }
-      } else if (p.kind === 'spans') {
-        // screen-space pixel rows, put back at the particle's depth so the camera lands them exactly
-        const w = p.z + 400, X = (sx) => ((sx - 128) * w) / 100, Y = (sy) => ((64 - sy) * w) / 100;
-        p.rows.forEach(([x0, x1], i) => {
-          const y = p.top + i;
-          if (y > 127) return;
-          const ax = X(x0), bx = X(x1 + 1), ay = Y(y), by = Y(y + 1);
-          put(ax, ay, p.z, p.colour); put(bx, ay, p.z, p.colour); put(bx, by, p.z, p.colour);
-          put(ax, ay, p.z, p.colour); put(bx, by, p.z, p.colour); put(ax, by, p.z, p.colour);
-        });
+      for (const [row, x0, x1] of p.runs) {
+        if (n + 6 > MAX_VERTS) break;
+        if (row < 0 || row >= VIEW_H) continue;
+        const a = x0, b = x1 + 1, top = -row, bot = -row - 1, c = p.colour;
+        put(a, top, c); put(b, top, c); put(b, bot, c);
+        put(a, top, c); put(b, bot, c); put(a, bot, c);
       }
     }
     this.geo.setDrawRange(0, n);
-    for (const k of ['position', 'ci', 'disc']) this.geo.attributes[k].needsUpdate = true;
+    for (const k of ['position', 'ci']) this.geo.attributes[k].needsUpdate = true;
   }
 
   /** Draw a frame. */

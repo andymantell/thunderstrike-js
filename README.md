@@ -55,7 +55,8 @@ Actions**.
 | `src/game/ai.js` | dispatch `DS:0x4377` | fighter, glider, miner, saboteur, lunger, pods, defence pods, explosions |
 | `src/game/terrain.js` | `sub_14E8`, `sub_201E`, `sub_20C2` | height interpolation, bunkers and pyramids built into the map |
 | `src/render/scene.js` | `sub_1BFA`, `sub_3D32`, `sub_1D2B`, `sub_15A2`, `sub_4143` | the original view-space maths and painter's draw order |
-| `src/render/renderer.js` | VGA output | three.js renders the primitives in the original order into a 256x128 colour-index target; a final pass composes the 320x200 screen through the VGA palette |
+| `src/render/pipeline.js` | `sub_43C5`, `sub_4770`, `sub_08EE`, `sub_6870`, `sub_6A64`, `sub_5E22` | the original's polygon pipeline: near clip, integer projection, screen clip and edge walkers, giving the exact pixel runs of every face |
+| `src/render/renderer.js` | VGA output | three.js draws those runs in the original order into a 256x128 colour-index target; a final pass composes the 320x200 screen through the VGA palette |
 | `src/render/hud.js` | `sub_0D6D`, `sub_0F4E`, `sub_62BE` | messages, scanner, arena map, gauges, counters |
 | `src/flow.js` | front end `0x9D0B-0xBFFF` | title, attract mode, presenter, menus, craft selection, briefings, results, game over |
 | `src/audio/` | `MZ.DAT` int 80h driver | PC-speaker effects and the three-voice PWM music player |
@@ -66,15 +67,13 @@ same integer arithmetic, so behaviour matches the DOS game.
 ### Checking against the original
 
 `tools/oracle` runs your `TS.EXE` in a CPU emulator next to the port, feeds both the same key presses and
-compares their state every frame (objects, random numbers, terrain, shield, craft ratings, camera). Scripted
-runs through every arena with each craft, and through the end-of-round results, come out identical frame for
-frame. See [tools/oracle/README.md](tools/oracle/README.md). The emulator is only a test tool; the game itself
+compares their state every frame (objects, random numbers, terrain, shield, craft ratings, camera) and, on
+sampled frames, every pixel of the cockpit and the 3D view. Scripted runs through every arena with each craft,
+and through the end-of-round results, come out identical frame for frame. See [tools/oracle/README.md](tools/oracle/README.md). The emulator is only a test tool; the game itself
 is the JavaScript in `src/`.
 
 ### Known differences
 
-- Polygons are rasterised by the GPU with standard three.js perspective projection. The original truncated
-  screen coordinates in integer division, so edges can differ by a pixel.
 - The music driver calibrates itself against the CPU, so pitch and tempo match the original on any machine,
   but the grain of its pulse-width synthesis depends on how fast that loop ran. A period machine is assumed
   (`LOOP_RATE` in `src/audio/music.js`).
