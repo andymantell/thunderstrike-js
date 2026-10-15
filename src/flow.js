@@ -502,6 +502,7 @@ export class Flow {
       d.print(4, 0xf + ds.cstr(0xa76b + i * 8).length, row, keyName(ds, sc));   // continues after the label
       d.blit();
     }
+    c.onKeysRedefined?.({ ...c.keys });
     yield 25;
   }
 

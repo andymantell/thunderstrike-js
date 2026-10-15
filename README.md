@@ -20,19 +20,22 @@ your browser and keeps them on your device only.
 
 Thunderstrike is still under copyright; whether you may download it where you live is for you to judge.
 
-Default keys (redefinable from Options, as in the original):
+The original's keys, and the arrow-key layout offered in **Settings**, Keys:
 
-| Key | Action |
-| --- | --- |
-| Z / X | turn left / right |
-| L / , | climb / dive |
-| P | thrust (tap twice quickly for a turbo burst, once you have turbo pods) |
-| Space | fire |
-| Esc / F1 / F2 / F3 | menu choices (Esc: DOS or abort, F1: options, F2: play, F3: craft) |
-| F4 | round, arena and game statistics |
-| F10 | pause (Q steps one frame while paused) |
+| Original | Arrow keys | Action |
+| --- | --- | --- |
+| Z / X | ← / → | turn left / right |
+| L / , | A / Z | climb / dive |
+| P | ↑ | thrust (tap twice quickly for a turbo burst, once you have turbo pods) |
+| Space | Space | fire |
+| Esc / F1 / F2 / F3 | same | menu choices (Esc: DOS or abort, F1: options, F2: play, F3: craft) |
+| F4 | same | round, arena and game statistics |
+| F10 | same | pause (Q steps one frame while paused) |
 
-Use the **Settings** button to switch to mouse control, pick the graphics mode or set the volume. The two
+Keys can also be redefined in the game's own options (F1, Keys), as in the original; Settings then remembers
+them as Custom.
+
+Use the **Settings** button to switch to mouse control, pick keys or the graphics mode, or set the volume. The two
 original modes play exactly the original game, which runs at 10 frames a second; Enhanced 3D runs it faster:
 
 - **Original**: the original's own frames, pixel for pixel.

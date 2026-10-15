@@ -54,6 +54,12 @@
   <div id="settings" hidden>
     <label>Controls
       <select id="opt-controls"><option value="keyboard">Keyboard</option><option value="mouse">Mouse</option></select></label>
+    <label>Keys
+      <select id="opt-keys">
+        <option value="original">Original (Z/X, P, Space, L/,)</option>
+        <option value="arrows">Arrow keys (arrows, Space, A/Z)</option>
+        <option value="custom">Custom (set in the game: F1, Keys)</option>
+      </select></label>
     <label>Graphics
       <select id="opt-render">
         <option value="original">Original (10 frames a second)</option>
@@ -61,7 +67,7 @@
         <option value="enhanced">Enhanced 3D (screen resolution, 50 Hz game)</option>
       </select></label>
     <label>Volume <input id="opt-volume" type="range" min="0" max="100" value="50"></label>
-    <p class="hint">Default keys: Z/X turn, L/, climb and dive, P thrust (tap twice for turbo), Space fire,
+    <p class="hint"><span id="keys-help"></span> Tap thrust twice for turbo.
       F1 options, F2 play, F3 craft, F4 stats, F10 pause, Esc menu.</p>
     <button id="opt-forget" class="link">Forget my game files</button>
   </div>

@@ -2,6 +2,7 @@ import { GameFiles } from './data/archive.js';
 import { loadGameData } from './data/loader.js';
 import { saveArchive, loadArchive, forgetArchive } from './ui/storage.js';
 import { App } from './app.js';
+import { KEY_LAYOUTS } from './input/controls.js';
 import { unzipSync } from 'fflate';
 
 const loader = document.getElementById('loader');
@@ -101,19 +102,34 @@ async function devFiles() {
 function setupSettings(app) {
   const gear = document.getElementById('gear'), panel = document.getElementById('settings');
   const controls = document.getElementById('opt-controls'), render = document.getElementById('opt-render');
+  const keys = document.getElementById('opt-keys'), keysHelp = document.getElementById('keys-help');
   const volume = document.getElementById('opt-volume');
   const saved = JSON.parse(localStorage.getItem('thunderstrike-settings') || '{}');
+  let custom = saved.customKeys ?? null;   // keys last set in the game's options menu
+  const c = app.controls;
   const apply = () => {
-    app.controls.mode = controls.value;
+    c.mode = controls.value;
+    if (keys.value === 'arrows') c.keys = { ...KEY_LAYOUTS.arrows };
+    else if (keys.value === 'custom') c.keys = { ...(custom ?? c.keys) };
+    else c.keys = { ...c.originalKeys };
+    keysHelp.textContent = {
+      original: 'Keys: Z/X turn, P thrust, Space fire, L/, climb and dive.',
+      arrows: 'Keys: \u2190/\u2192 turn, \u2191 thrust, Space fire, A/Z climb and dive.',
+      custom: 'Keys: as set in the game (F1, Keys).',
+    }[keys.value];
     app.flow.renderMode = render.value;
     app.setVolume(+volume.value / 100);
-    localStorage.setItem('thunderstrike-settings', JSON.stringify({ controls: controls.value, render: render.value, volume: volume.value }));
+    localStorage.setItem('thunderstrike-settings', JSON.stringify({
+      controls: controls.value, keys: keys.value, customKeys: custom, render: render.value, volume: volume.value,
+    }));
   };
+  c.onKeysRedefined = (k) => { custom = k; keys.value = 'custom'; apply(); };
   if (saved.controls) controls.value = saved.controls;
+  if (saved.keys) keys.value = saved.keys;
   if (saved.volume) volume.value = saved.volume;
   if (saved.render) render.value = saved.render;
   apply();
-  for (const el of [controls, render, volume]) el.addEventListener('change', apply);
+  for (const el of [controls, keys, render, volume]) el.addEventListener('change', apply);
   gear.hidden = false;
   gear.addEventListener('click', () => { panel.hidden = !panel.hidden; });
   document.getElementById('opt-forget').addEventListener('click', async () => { await forgetArchive(); location.reload(); });

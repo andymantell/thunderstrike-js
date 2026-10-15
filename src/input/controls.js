@@ -5,12 +5,23 @@
  *   fireLatch / thrustLatch: new presses        [0x9FEE],[0x9FF0]
  * Keyboard mode follows sub_7E04, mouse mode sub_7BDB.
  */
+/**
+ * Key layouts offered in the settings, by PC scancode. 'original' is the
+ * game's own default (DS:0x9FDC: Z/X turn, P thrust, Space fire, L/, climb
+ * and dive); the game's options menu can still redefine any of them.
+ */
+export const KEY_LAYOUTS = {
+  arrows: { left: 0x4b, right: 0x4d, thrust: 0x48, fire: 0x39, up: 0x1e, down: 0x2c },   // arrows, Space, A/Z
+};
+
 export class Controls {
   constructor(keyboard, ds) {
     this.kb = keyboard;
     this.mode = 'keyboard';
     // default key scancodes DS:0x9FDC: left, right, thrust, fire, up, down
-    this.keys = { left: ds.u16(0x9fdc), right: ds.u16(0x9fde), thrust: ds.u16(0x9fe0), fire: ds.u16(0x9fe2), up: ds.u16(0x9fe4), down: ds.u16(0x9fe6) };
+    this.originalKeys = { left: ds.u16(0x9fdc), right: ds.u16(0x9fde), thrust: ds.u16(0x9fe0), fire: ds.u16(0x9fe2), up: ds.u16(0x9fe4), down: ds.u16(0x9fe6) };
+    this.keys = { ...this.originalKeys };
+    this.onKeysRedefined = null;   // the settings remember keys set in the game's options menu
     this.x = 0x80; this.y = 0x80; this.turnRate = 0;
     this.steer = 0x80;   // [0x9FF2] keyboard steering accumulator; [0x9FEA] (x) is what the game reads
     this.repeat = 0; this.repeatAcc = 0;
