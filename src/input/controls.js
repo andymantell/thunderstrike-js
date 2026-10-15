@@ -15,7 +15,7 @@ export class Controls {
     this.steer = 0x80;   // [0x9FF2] keyboard steering accumulator; [0x9FEA] (x) is what the game reads
     this.repeat = 0; this.repeatAcc = 0;
     // mouse position as int 33h reports it (range 0..0xFF on both axes, set by sub_7C7F)
-    this.mouse = { x: 0x80, y: 0x80, buttons: 0, down: 0, pressed: [0, 0] };
+    this.mouse = { x: 0x80, y: 0x80, buttons: 0, down: 0, pressed: [0, 0], seen: false };
     // mouse options (sub_A056): speeds [0xA002],[0xA004] 0..0x32, reverse height [0x9FFE], swap buttons [0xA000]
     this.mouseSpeed = [ds.u16(0xa002), ds.u16(0xa004)];
     this.invertY = ds.u16(0x9ffe) !== 0;
@@ -34,6 +34,16 @@ export class Controls {
     m.down = 0;
     return b;
   }
+
+  /**
+   * Whether menus show the pointer and take clicks: always with mouse
+   * control (as the original), and with keyboard control once the mouse has
+   * been moved over the game (a convenience the original did not have).
+   */
+  pointerShown() { return this.mode === 'mouse' || this.mouse.seen; }
+
+  /** A click since the last look, for "press a key" waits. */
+  takeClick() { const m = this.mouse, d = m.down; m.down = 0; return d !== 0; }
 
   /** sub_9E12: menu pointer (height never reversed), clamped to the 256x128 window. */
   pointer() {

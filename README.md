@@ -39,7 +39,10 @@ graphics modes play exactly the same game (the game itself always runs at its or
 - **Original, smooth**: the original's pixel-exact renderer, drawing in-between frames at the screen's refresh
   rate (for example 120 fps). Moving things are blended between game frames, which shows the picture one game
   frame (0.1 s) late.
-- **Enhanced 3D**: the same scene drawn by three.js as real 3D at screen resolution, smooth as above.
+- **Enhanced 3D**: the same scene drawn by three.js as real 3D at screen resolution, smooth as above. The
+  land reaches three times as far as the original's (48 cells instead of 16), fading into the distance.
+
+The menus can be clicked with the mouse in either control mode.
 
 ## Development
 
@@ -92,7 +95,7 @@ is the JavaScript in `src/`.
   but the grain of its pulse-width synthesis depends on how fast that loop ran. A period machine is assumed
   (`LOOP_RATE` in `src/audio/music.js`).
 - Mouse speed is passed to the DOS mouse driver (int 33h function 1Ah), whose exact response curve is not
-  known; the port scales pointer movement linearly. Until the pointer is locked to the page (click the
-  game), the mouse position maps directly onto the cockpit window.
+  known; the port scales pointer movement linearly. The pointer is locked to the page only while flying;
+  in the menus, and until the game is clicked, the mouse position maps directly onto the cockpit window.
 - The joystick calibration screens are not reproduced. Keyboard and mouse control are.
 - Only the VGA version is ported. The EGA and CGA drivers in the executable are not.

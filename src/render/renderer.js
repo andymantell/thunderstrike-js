@@ -101,8 +101,8 @@ export class Renderer {
   /**
    * Enhanced mode: view-space polygons from ModernSceneBuilder, drawn with
    * the original's projection (sx = 128 + 100X/(Z+400), sy = 64 - 100Y/(Z+400))
-   * as a perspective camera, in the original's painter's order, at the size
-   * the view has on screen, multisampled, coloured through the palette.
+   * as a perspective camera, with a depth buffer, at the size the view has
+   * on screen, multisampled, coloured through the palette.
    */
   makeEnhancedScene() {
     this.hdScene = new THREE.Scene();
@@ -130,24 +130,30 @@ export class Renderer {
     geo.setAttribute('ci', new THREE.BufferAttribute(this.hdCi, 1).setUsage(THREE.DynamicDrawUsage));
     geo.setAttribute('disc', new THREE.BufferAttribute(this.hdDisc, 3).setUsage(THREE.DynamicDrawUsage));
     this.hdGeo = geo;
-    const mat = new THREE.ShaderMaterial({
-      uniforms: { palette: { value: this.palette } },
-      vertexShader: `attribute float ci; attribute vec3 disc; varying float vCi; varying vec3 vDisc;
-        void main(){ vCi = ci; vDisc = disc; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-      fragmentShader: `uniform sampler2D palette; varying float vCi; varying vec3 vDisc;
+    // a depth buffer replaces the original's painter's order; far land fades into the ground colour
+    this.hdMat = new THREE.ShaderMaterial({
+      uniforms: { palette: { value: this.palette }, ground: { value: 0 }, fogNear: { value: 3600 }, fogFar: { value: 5800 } },
+      vertexShader: `attribute float ci; attribute vec3 disc; varying float vCi; varying vec3 vDisc; varying float vDist;
+        void main(){ vCi = ci; vDisc = disc; vec4 v = modelViewMatrix * vec4(position, 1.0); vDist = length(v.xz);
+          gl_Position = projectionMatrix * v; }`,
+      fragmentShader: `uniform sampler2D palette; uniform float ground, fogNear, fogFar;
+        varying float vCi; varying vec3 vDisc; varying float vDist;
+        vec4 pal(float i){ return texture2D(palette, vec2((floor(i + 0.5) + 0.5) / 256.0, 0.5)); }
         void main(){ if (vDisc.z > 0.5 && dot(vDisc.xy, vDisc.xy) > 1.0) discard;
-          gl_FragColor = texture2D(palette, vec2((floor(vCi + 0.5) + 0.5) / 256.0, 0.5)); }`,
-      depthTest: false, depthWrite: false, side: THREE.DoubleSide,
+          gl_FragColor = mix(pal(vCi), pal(ground), smoothstep(fogNear, fogFar, vDist)); }`,
+      depthTest: true, depthWrite: true, side: THREE.DoubleSide,
     });
+    const mat = this.hdMat;
     const mesh = new THREE.Mesh(geo, mat);
     mesh.frustumCulled = false;
     this.hdScene.add(mesh);
-    this.hdTarget = new THREE.WebGLRenderTarget(512, 256, { samples: 4, depthBuffer: false });
+    this.hdTarget = new THREE.WebGLRenderTarget(512, 256, { samples: 4, depthBuffer: true });
   }
 
   /** Enhanced mode: view-space polygons and discs from ModernSceneBuilder. */
   setEnhancedPrimitives(prims, groundColour) {
     this.hdBg.uniforms.ground.value = groundColour;
+    this.hdMat.uniforms.ground.value = groundColour;
     let n = 0;
     const put = (x, y, z, c, dx = 0, dy = 0, d = 0) => {
       if (n >= MAX_HD) return;
@@ -285,6 +291,7 @@ export class Renderer {
       const w = Math.max(256, Math.round((size.x * 256) / 320)), h = Math.max(128, Math.round((size.y * 128) / 200));
       if (this.hdTarget.width !== w || this.hdTarget.height !== h) this.hdTarget.setSize(w, h);
       gl.setRenderTarget(this.hdTarget);
+      gl.clear(true, true, false);
       gl.render(this.hdScene, this.hdCamera);
     }
     this.compositeMat.uniforms.useHd.value = hd ? 1 : 0;

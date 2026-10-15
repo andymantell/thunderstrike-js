@@ -55,7 +55,8 @@ export class App {
     };
     this.canvas.addEventListener('pointerdown', (e) => {
       if (!locked()) absolute(e);
-      if (c.mode === 'mouse' && !locked()) this.canvas.requestPointerLock?.();
+      // the mouse is captured only to fly; menus use the ordinary pointer
+      if (c.mode === 'mouse' && this.flow.inPlay && !locked()) this.canvas.requestPointerLock?.();
       if (e.button === 0) { m.buttons |= 1; m.down |= 1; m.pressed[1] = 1; }
       if (e.button === 2) { m.buttons |= 2; m.down |= 2; m.pressed[0] = 1; }
     });
@@ -65,7 +66,7 @@ export class App {
     });
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('pointermove', (e) => {
-      if (!locked()) { if (e.target === this.canvas) absolute(e); return; }
+      if (!locked()) { if (e.target === this.canvas) { absolute(e); m.seen = true; } return; }
       m.x = Math.max(0, Math.min(255, m.x + (e.movementX / 2) * c.mouseScale(0)));
       m.y = Math.max(0, Math.min(255, m.y + (e.movementY / 2) * c.mouseScale(1)));
     });

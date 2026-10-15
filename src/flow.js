@@ -84,6 +84,9 @@ export class Flow {
     return input.buttons & 2 ? 0x9d : 0;
   }
 
+  /** A key, or a mouse click (clicks are a convenience the original's text screens did not take). */
+  anyInput() { return this.app.controls.takeClick() || this.inkey() !== 0; }
+
   /** sub_9DBD + timer: wait `n` ticks. */
   *wait(n) { yield n; }
 
@@ -93,7 +96,7 @@ export class Flow {
     this.display.print(0xe, 0x1c, 0xf, this.ds.cstr(0xbefd));
     this.display.blit();
     let t = 0;
-    yield () => this.inkey() !== 0 || ++t >= timeout;
+    yield () => this.anyInput() || ++t >= timeout;
   }
 
   /** int 80h AH=1/AH=0: play a tune until it ends or a key is pressed; returns true if a key ended it. */
@@ -102,7 +105,7 @@ export class Flow {
     m.play(tune);
     let key = false;
     yield () => {
-      if (this.inkey() !== 0 || this.kb.anyLatched()) { key = true; return true; }
+      if (this.anyInput() || this.kb.anyLatched()) { key = true; return true; }
       return !m.playing;
     };
     m.stop();
@@ -173,7 +176,11 @@ export class Flow {
   /** CS:22C1 main loop. */
   *play() {
     this.inPlay = true;
-    try { yield* this.arenaLoop(); } finally { this.inPlay = false; this.app.renderer.enhanced = false; }
+    try { yield* this.arenaLoop(); } finally {
+      this.inPlay = false;
+      this.app.renderer.enhanced = false;
+      if (document.pointerLockElement) document.exitPointerLock?.();
+    }
   }
 
   *arenaLoop() {
@@ -390,12 +397,12 @@ export class Flow {
     let result = -1;
     this.kb.clearLatches();
     yield () => {
-      const p = this.mouseMode ? this.pointer() : null;
+      const p = this.app.controls.pointerShown() ? this.pointer() : null;
       const c = u8(-this.inkey());
       let r = -1;
       if (c === 2) r = 0;
       else if (c >= 0xb && c <= 0xd) r = c - 0xa;
-      else if (!p && c === 0x63) r = 4;
+      else if (!this.mouseMode && c === 0x63) r = 4;
       if (p) {
         if (p.buttons) r = r < 0 ? -2 : r;
         const sx = p.x & 0x3f;
@@ -557,12 +564,12 @@ export class Flow {
   *talk(anim, col, row, textOff, mouthOff, restore) {
     const d = this.display, ds = this.ds;
     d.printShadow(0xe, col, row, ds.cstr(textOff));
-    let key = this.inkey() !== 0;
+    let key = this.anyInput();
     for (let i = 0; !key && ds.u8(mouthOff + i); i++) {
       d.animFrame(anim, ds.u8(mouthOff + i) - 0x30);
       d.blit();
       let t = 0;
-      yield () => { key = this.inkey() !== 0; return key || ++t >= 7; };
+      yield () => { key = this.anyInput(); return key || ++t >= 7; };
       if (key) { d.animFrame(anim, 0); d.blit(); }
     }
     if (restore) { this.studio(); d.animFrame(anim, 0); }
@@ -941,7 +948,7 @@ export class Flow {
         const table = tv.sel <= 3 || tv.sel === 7 ? 0xa7be : tv.sel === 4 ? 0xa7ba : tv.sel === 5 ? 0xa7b6 : 0xa7b2;
         shown = this.ds.u8(table + tv.quarter);
       }
-      key = this.inkey() !== 0;
+      key = this.anyInput();
     }
     this.scene.pipe.halfWidth = false;
     r.halfSize = false;

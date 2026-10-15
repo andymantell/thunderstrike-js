@@ -1,9 +1,10 @@
 /**
- * Enhanced rendering: the same scene as SceneBuilder (the same terrain
- * window, objects, colours and painter's order) but worked out in floating
- * point and handed to three.js as view-space polygons, so the GPU draws it
- * with perspective at screen resolution. Angles may be fractional, which is
- * what the in-between frames of the smooth modes need.
+ * Enhanced rendering: the scene SceneBuilder draws (terrain, objects and
+ * their colours), worked out in floating point and handed to three.js as
+ * view-space polygons, so the GPU draws it with perspective and a depth
+ * buffer at screen resolution, with the terrain reaching three times as far.
+ * Angles may be fractional, which is what the in-between frames of the
+ * smooth modes need.
  *
  * View space is the original's: x and z in quarter world units, y in world
  * units, the eye 400 units behind the screen plane.
@@ -12,72 +13,80 @@ import { SceneBuilder } from './scene.js';
 import { s8, u8 } from '../core/int.js';
 
 const TURN = (2 * Math.PI) / 256;   // radians per angle unit (bytes)
+const WINDOW = 48;                  // terrain cells across (the original: 16)
 const wrap16 = (v) => ((v % 65536) + 98304) % 65536 - 32768;   // signed 16-bit difference, kept fractional
 
 export class ModernSceneBuilder extends SceneBuilder {
-  /** sub_1BFA in floats: the 16x16 window corners in view space. */
+  /**
+   * The terrain around the craft in view space. The original keeps a 16x16
+   * window; here it is WINDOW cells across (the 64x64 map wraps, so more
+   * than 64 would repeat), so the land reaches much further.
+   */
   buildGrid(g) {
-    const map = g.terrain.map;
+    const map = g.terrain.map, N = WINDOW + 1, half = WINDOW / 2;
     const a = (g.camYaw / 256) * TURN, sin = Math.sin(a), cos = Math.cos(a);
-    const originCol = ((Math.floor(g.p.x) >> 10) - 8) & 0x3f;
-    const originRow = ((Math.floor(g.p.z) >> 10) - 8) & 0x3f;
-    // corner (i, j) relative to the craft, in quarter units (the grid is 0x100 apart)
+    const col0 = ((Math.floor(g.p.x) >> 10) - half) & 0x3f;
+    // map rows run the other way from Z; row = (Z >> 10) - 16, as in the original's window
+    const row0 = ((Math.floor(g.p.z) >> 10) - 16 + half) & 0x3f;
     const fx = (g.p.x / 4) % 256, fz = (g.p.z / 4) % 256;
-    let cell = (originRow << 6) | originCol;
-    for (let j = 0; j < 16; j++) {
-      const dz = 0x800 - fz - j * 0x100;
-      for (let i = 0; i < 16; i++) {
-        const k = j * 16 + i, dx = -0x800 - fx + i * 0x100;
-        this.gx[k] = dx * cos - dz * sin;
-        this.gz[k] = dx * sin + dz * cos;
-        this.vis[k] = this.gz[k] >= -390 ? 1 : 0;
-        this.gb[k] = map[0x1000 + cell];
-        this.ga[k] = map[cell];
-        this.gy[k] = (map[cell] & 0xf0) - g.camHeight;
-        cell = (cell & 0xfc0) | ((cell + 1) & 0x3f);
+    this.N = N;
+    this.vx = new Float32Array(N * N); this.vy = new Float32Array(N * N); this.vz = new Float32Array(N * N);
+    this.cellB = new Uint8Array(N * N);
+    for (let j = 0; j < N; j++) {
+      const dz = half * 0x100 - fz - j * 0x100, row = (row0 - j) & 0x3f;
+      for (let i = 0; i < N; i++) {
+        const k = j * N + i, dx = -half * 0x100 - fx + i * 0x100, cell = (row << 6) | ((col0 + i) & 0x3f);
+        this.vx[k] = dx * cos - dz * sin;
+        this.vz[k] = dx * sin + dz * cos;
+        this.vy[k] = (map[cell] & 0xf0) - g.camHeight;
+        this.cellB[k] = map[0x1000 + cell];
       }
-      cell = ((cell - 0x40) & 0xfc0) | originCol;
     }
-    this.originCol = originCol; this.originRow = originRow;
   }
 
-  /** sub_3D32 in floats; view positions go to fx/fy/fz instead of the object table. */
+  /** Every object within the window, in view space (fx, fy, fz). */
   buildObjects(g) {
-    const o = g.o;
+    const o = g.o, reach = (WINDOW / 2) * 0x400;
     const a = (g.camYaw / 256) * TURN, sin = Math.sin(a), cos = Math.cos(a);
     this.fx = new Float64Array(24); this.fy = new Float64Array(24); this.fz = new Float64Array(24);
-    const list = [];
+    this.objects = [];
     for (let s = 0; s < 24; s++) {
       if (o.type[s] === 0) continue;
-      const gx = ((Math.floor(o.x[s]) >> 10) - this.originCol) & 0x3f;
-      const gzr = ((Math.floor(o.z[s]) >> 10) - this.originRow) & 0x3f;
-      if (gx & 0x30 || gzr & 0x30) continue;
-      o.cell[s] = (((15 - gzr) & 0xff) * 16 + gx) * 2;
       const dx = wrap16(o.x[s] - g.p.x), dz = wrap16(o.z[s] - g.p.z);
-      const x = (dx * cos - dz * sin) / 4, z = (dx * sin + dz * cos) / 4;
-      this.fx[s] = x; this.fy[s] = o.y[s] - g.camHeight; this.fz[s] = z;
-      list.push({ s, z });
+      if (Math.abs(dx) > reach || Math.abs(dz) > reach) continue;
+      this.fx[s] = (dx * cos - dz * sin) / 4; this.fy[s] = o.y[s] - g.camHeight; this.fz[s] = (dx * sin + dz * cos) / 4;
+      if (this.fz[s] < -400) continue;   // behind the eye
+      this.objects.push(s);
     }
-    list.sort((p, q) => q.z - p.z);   // far first, like the bubble sort of sub_3F3C
-    this.objects = list.filter((e) => {
-      const vz = this.fz[e.s] - o.radius[e.s], vx = this.fx[e.s];
-      return vz > -250 && vz < 0x7d0 && vx <= 0x1f40 && vx >= -0x1f40;
-    }).map((e) => e.s);
   }
 
-  terrainCell(k, anim, prims) {
-    const raw = this.gb[k + 1];
-    let colour = raw & 0x7f;
-    if (colour < 0x10) colour = 0;
-    if (colour >= 0x70) colour = anim;
-    const A = k, B = k + 1, C = k + 17, D = k + 16;
-    const v = this.vis;
-    if (!(v[A] | v[B] | v[C] | v[D])) return;
-    const P = (i) => [this.gx[i], this.gy[i], this.gz[i]];
-    const poly = (...pts) => prims.push({ kind: 'poly', colour, pts });
-    if (!(raw & 0x80)) poly(P(A), P(B), P(C), P(D));
-    else if (this.gy[A] !== this.gy[C]) { poly(P(A), P(B), P(C)); poly(P(A), P(C), P(D)); }
-    else { poly(P(A), P(B), P(D)); poly(P(B), P(C), P(D)); }
+  /** The scene for a depth-buffered draw: all terrain cells, then the objects. */
+  build(g) {
+    this.buildGrid(g);
+    this.buildObjects(g);
+    const L = this.light(g.camAngle);
+    this.animIndex = (this.animIndex + 1) & 0xf;
+    const anim = this.ds.u8(0x33b0 + this.animIndex);
+    const prims = [];
+    const N = this.N;
+    for (let j = 0; j < N - 1; j++) {
+      for (let i = 0; i < N - 1; i++) {
+        const A = j * N + i, B = A + 1, C = A + N + 1, D = A + N;
+        // the original takes the colour from the corner after A (k + 1)
+        const raw = this.cellB[B];
+        let colour = raw & 0x7f;
+        if (colour < 0x10) colour = 0;
+        if (colour >= 0x70) colour = anim;
+        const P = (k) => [this.vx[k], this.vy[k], this.vz[k]];
+        if (Math.max(this.vz[A], this.vz[B], this.vz[C], this.vz[D]) < -390) continue;
+        const poly = (...pts) => prims.push({ kind: 'poly', colour, pts });
+        if (!(raw & 0x80)) poly(P(A), P(B), P(C), P(D));
+        else if (this.vy[A] !== this.vy[C]) { poly(P(A), P(B), P(C)); poly(P(A), P(C), P(D)); }
+        else { poly(P(A), P(B), P(D)); poly(P(B), P(C), P(D)); }
+      }
+    }
+    for (const s of this.objects) this.object(g, s, L, prims);
+    return prims;
   }
 
   /** One object: model rotated in floats, colours shaded as the original does. */
