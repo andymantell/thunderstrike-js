@@ -19,7 +19,7 @@ def snapshot(t):
     s['map'] = bytes(t.uc.mem_read(lin(t.ds16(0xd4), 0), 0x2000)).hex()
     return s
 
-def main(keys_file, slot, out_file, force_clear=0):
+def main(keys_file, slot, out_file, force_clear=0, pictures=0):
     frames = json.load(open(keys_file))
     mouse = frames and isinstance(frames[0], dict)
     t = TS(mouse=mouse)
@@ -40,7 +40,10 @@ def main(keys_file, slot, out_file, force_clear=0):
             print(f'frame {f}: the original left the arena loop ({e})')
             break
         out.append(snapshot(t))
+        if pictures and f % pictures == 0:
+            out[-1]['view'] = bytes(t.uc.mem_read(lin(t.ds16(0x674e), 0), 256 * 128)).hex()
+            out[-1]['screen'] = bytes(t.uc.mem_read(0xa0000, 320 * 200)).hex()
     json.dump(out, open(out_file, 'w'))
 
 if __name__ == '__main__':
-    main(sys.argv[1], int(sys.argv[2]), sys.argv[3], int(sys.argv[4]) if len(sys.argv) > 4 else 0)
+    main(sys.argv[1], int(sys.argv[2]), sys.argv[3], int(sys.argv[4]) if len(sys.argv) > 4 else 0, int(sys.argv[5]) if len(sys.argv) > 5 else 0)

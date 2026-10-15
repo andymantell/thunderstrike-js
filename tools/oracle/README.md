@@ -26,6 +26,8 @@ PYTHON=.venv/bin/python tools/oracle/compare.sh FRAMES CRAFT [--cheat=N] [--full
 - `--cheat=N`: type the developers' round-skip sequence every `N` frames to reach later rounds and arenas.
 - `--full`: also type the full-upgrade sequence the first time.
 - `--mouse`: control with the mouse (int 33h) instead of the keyboard, the game started with `VM`.
+- `--pictures=N`: every `N` frames also compare the cockpit panel (VGA memory) and the HUD drawn over the 3D
+  view, pixel for pixel. The 3D view itself is drawn by the GPU in the port and is not compared.
 - `--clear=N`: every `N` frames, zero the bunker and enemy counts on both sides so the round ends, which runs
   the round results (and the craft rating changes they make).
 

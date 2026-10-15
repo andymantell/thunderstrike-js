@@ -97,7 +97,7 @@ export class Fonts {
   }
 
   /** sub_652E / 64CB: 16x16 two bitplane glyphs; colours from planes (dl, dh) = (0x01, 0x0B). */
-  big(cv, x, y, index, table = 0x7a83, opaque = true, colours = [0x01, 0x0b]) {
+  big(cv, x, y, index, table = 0x7a83, opaque = true, colours = [0x0b, 0x01]) {   // sub_652E: low byte 0x0B, high byte 0x01
     let si = table + index * 64;
     for (let r = 0; r < 16; r++) {
       for (let half = 0; half < 2; half++) {
@@ -175,9 +175,9 @@ export class Hud {
       const cur = (v << 24) >> 24, want = (target << 24) >> 24;
       if (cur === want) return;
       let colour;
-      if (cur > want) { v = (v - 1) & 0xffff; colour = 0; }
-      else { v = (v + 1) & 0xffff; colour = ((v & 0xff) >> 1) + colourBase; }
-      g.gauges[key] = v;
+      // going down, 62EE decrements the stored value but erases at the value it loaded
+      if (cur > want) { g.gauges[key] = (v - 1) & 0xffff; colour = 0; }
+      else { v = (v + 1) & 0xffff; g.gauges[key] = v; colour = ((v & 0xff) >> 1) + colourBase; }
       const dl = v & 0xff;
       let di = base + s16(v) - dl * 320;
       for (let i = 0; i < 7; i++) {

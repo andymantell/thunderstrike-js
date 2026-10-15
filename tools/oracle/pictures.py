@@ -1,0 +1,30 @@
+"""Compare the pictures recorded with --pictures=N.
+
+The panel (VGA memory, 320x200) is compared pixel for pixel. In the 3D window
+the port draws the HUD on its own layer (0 = transparent) over a GPU-rendered
+view, so only the HUD pixels are compared there.
+
+usage: python pictures.py orig.json port.json
+"""
+import json, sys
+
+def main(a_file, b_file):
+    a, b = json.load(open(a_file)), json.load(open(b_file))
+    bad = 0
+    for f, (x, y) in enumerate(zip(a, b)):
+        if 'screen' not in x or 'screen' not in y:
+            continue
+        sa, sb = bytes.fromhex(x['screen']), bytes.fromhex(y['screen'])
+        # outside the 3D window (32,16)-(288,144)
+        panel = [(i % 320, i // 320) for i in range(64000)
+                 if sa[i] != sb[i] and not (32 <= i % 320 < 288 and 16 <= i // 320 < 144)]
+        va, vb = bytes.fromhex(x['view']), bytes.fromhex(y['view'])
+        hud = [(i % 256, i // 256) for i in range(256 * 128) if vb[i] and va[i] != vb[i]]
+        status = 'ok' if not panel and not hud else 'DIFFERENT'
+        if panel or hud:
+            bad += 1
+        print(f'frame {f}: panel {len(panel)} px differ {panel[:6]}, HUD {len(hud)} px differ {hud[:6]}  {status}')
+    return bad
+
+if __name__ == '__main__':
+    sys.exit(1 if main(sys.argv[1], sys.argv[2]) else 0)

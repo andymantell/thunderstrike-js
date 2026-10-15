@@ -125,6 +125,10 @@ for (let f = 0; f < frames; f++) {
     craft: [g.craft.accel, g.craft.speed, g.craft.turn], camera: [g.camYaw, g.camAngle, g.camHeight],
     map: Buffer.from(g.terrain.map.slice(0, 0x2000)).toString('hex'),
   });
+  if (opt.pictures && f % +opt.pictures === 0) {
+    s.view = Buffer.from(app.view.d).toString('hex');
+    s.screen = Buffer.from(app.screen.d).toString('hex');
+  }
   out.push(s);
   if (ev && ev !== 'cleared') break;   // game over: the original leaves the loop here
 }
