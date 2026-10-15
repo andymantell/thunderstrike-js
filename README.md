@@ -47,7 +47,7 @@ During development, put (or symlink) your game folder at `./game` (it is git-ign
 `http://localhost:5173/?devdata` to skip the file picker. Tests look for the files in `./game` or in
 `$THUNDERSTRIKE_DIR`, and skip themselves when the files are not there.
 
-Pushes to the default branch build and deploy to GitHub Pages through `.github/workflows/pages.yml`. If
+Pushes to `main` build and deploy to GitHub Pages through `.github/workflows/pages.yml`. If
 Pages has not been enabled for the repository, enable it under **Settings → Pages → Source: GitHub
 Actions**.
 
