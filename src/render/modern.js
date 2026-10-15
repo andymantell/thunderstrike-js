@@ -89,6 +89,16 @@ export class ModernSceneBuilder extends SceneBuilder {
     return prims;
   }
 
+  /** A model with its holes filled (see closeModel), made once. */
+  closed(id) {
+    this.closedModels ??= new Map();
+    if (!this.closedModels.has(id)) {
+      const m = this.models.get(id);
+      this.closedModels.set(id, m && closeModel(m));
+    }
+    return this.closedModels.get(id);
+  }
+
   /** One object: model rotated in floats, colours shaded as the original does. */
   object(g, s, L, prims) {
     const o = g.o;
@@ -98,7 +108,7 @@ export class ModernSceneBuilder extends SceneBuilder {
       prims.push({ kind: 'disc', colour: this.glow((model >> 8) & 0xff, g), x: px, y: py, z: pz, r: u8(-model) });
       return;
     }
-    const m = this.models.get(model);
+    const m = this.closed(model);
     if (!m) return;
     const yaw = (g.camYaw / 256 - o.yaw[s]) * TURN, pitch = o.pitch[s] * TURN, roll = o.roll[s] * TURN;
     const [cr, sr, cp, sp, cy, sy] = [Math.cos(roll), Math.sin(roll), Math.cos(pitch), Math.sin(pitch), Math.cos(yaw), Math.sin(yaw)];
@@ -124,6 +134,69 @@ export class ModernSceneBuilder extends SceneBuilder {
       prims.push({ kind: 'poly', colour: this.glow(colour, g), layer: ++layer, pts: f.idx.map((i) => [vx[i], vy[i], vz[i]]) });
     }
   }
+}
+
+/**
+ * Some of the original models are not closed: craft 2, for one, has a
+ * triangle missing on each flank and two underneath, which at 320x200 let
+ * a few pixels of sky through and at screen resolution show as gaps. The
+ * holes are found from edges that only one face uses (leaving out decals,
+ * single faces laid over another, whose edges are all like that) and each
+ * is filled with a face wound like its neighbours, with its own normal,
+ * coloured as the neighbour it lies closest in angle to.
+ */
+function closeModel(m) {
+  const V = (i) => [m.verts[i * 3], m.verts[i * 3 + 1], m.verts[i * 3 + 2]];
+  const key = (a, b) => (a < b ? `${a}-${b}` : `${b}-${a}`);
+  const uses = new Map();
+  for (const f of m.faces) for (let i = 0; i < f.idx.length; i++) {
+    const k = key(f.idx[i], f.idx[(i + 1) % f.idx.length]);
+    uses.set(k, (uses.get(k) ?? 0) + 1);
+  }
+  const decal = (f) => f.idx.every((v, i) => uses.get(key(v, f.idx[(i + 1) % f.idx.length])) === 1);
+  const unit = (v) => { const l = Math.hypot(...v) || 1; return v.map((c) => c / l); };
+  const normalOf = (f) => unit(V(f.normal));
+  // the holes' edges, each run the other way from the face that has it
+  const edges = [];
+  for (const f of m.faces) {
+    if (f.idx.length < 3 || decal(f)) continue;
+    for (let i = 0; i < f.idx.length; i++) {
+      const a = f.idx[i], b = f.idx[(i + 1) % f.idx.length];
+      if (uses.get(key(a, b)) === 1) edges.push({ from: b, to: a, face: f });
+    }
+  }
+  if (!edges.length) return m;
+  const verts = Array.from(m.verts), faces = m.faces.slice();
+  let vertexCount = m.vertexCount;
+  const left = new Set(edges);
+  while (left.size) {
+    // each hole: the shortest way round from an edge's end back to its start
+    const e0 = left.values().next().value;
+    left.delete(e0);
+    const via = new Map([[e0.to, null]]), queue = [e0.to];
+    while (queue.length && !via.has(e0.from)) {
+      const v = queue.shift();
+      for (const e of left) if (e.from === v && !via.has(e.to)) { via.set(e.to, e); queue.push(e.to); }
+    }
+    if (!via.has(e0.from)) continue;
+    const ring = [e0];
+    for (let e = via.get(e0.from); e; e = via.get(e.from)) ring.unshift(e);
+    for (const e of ring) left.delete(e);
+    const loop = ring.map((e) => e.from);
+    const near = new Set(ring.map((e) => e.face));
+    // the stored normals point against (v0 - v1) x (v2 - v1); 62 is their length
+    const [a, b, c] = loop.slice(0, 3).map(V);
+    const u = a.map((x, k) => x - b[k]), w = c.map((x, k) => x - b[k]);
+    const n = unit([-(u[1] * w[2] - u[2] * w[1]), -(u[2] * w[0] - u[0] * w[2]), -(u[0] * w[1] - u[1] * w[0])]);
+    let best = null, bestDot = -2;
+    for (const f of near) {
+      const d = normalOf(f).reduce((t, x, k) => t + x * n[k], 0);
+      if (d > bestDot) { bestDot = d; best = f; }
+    }
+    verts.push(...n.map((x) => Math.round(x * 62)));
+    faces.push({ normal: vertexCount++, colour: best.colour, idx: loop });
+  }
+  return { ...m, verts: Int16Array.from(verts), vertexCount, faces };
 }
 
 /** Back-face test against the eye at (0, 0, -400), in floats. */

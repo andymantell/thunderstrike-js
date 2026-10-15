@@ -51,6 +51,8 @@ original modes play exactly the original game, which runs at 10 frames a second;
   Keyboard steering skips the original's dead zone: the turn keys work a virtual joystick that moves a step
   a frame, and its middle 60% gives no turn, so in the original a turn starts 0.3 s after the key and
   reversing one takes 0.7 s. Here it starts at once and letting go stops it.
+  Some of the original models have holes (craft 2 is missing a triangle on each flank and two underneath),
+  which let a few pixels of sky through at 320x200; enhanced 3D fills them.
 
 The menus can be clicked with the mouse in either control mode.
 
