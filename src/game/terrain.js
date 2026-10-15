@@ -13,11 +13,40 @@ import { loadMap } from '../data/world.js';
 export const A = 0x0000;   // layer A offset in the map segment (heights)
 export const B = 0x1000;   // layer B offset (surface type / colour)
 
+/**
+ * Bunker records live in fixed DS arrays, one word per bunker. They are
+ * not cleared between rounds, and sub_3090 can run past the live entries
+ * (see Arena.spawnWaves), so they are kept in DS exactly as the original
+ * keeps them.
+ */
+const BUNKER = {
+  CELL: 0x2258,    // centre cells copied from L.DAT
+  BASE: 0x2276,    // ground height before raising (byte)
+  SPAWN: 0x228e,   // launch pad cell (also the sink centre)
+  PAD2: 0x22a6, PAD3: 0x22be, PAD4: 0x22d6,
+  HEALTH: 0x22ee,  // 5 when built, 0 destroyed and sinking, 0xFFFF sunk
+  COOL: 0x430a,    // frames until it can launch again
+  COUNT: 0x231e,
+};
+
+/** One bunker slot, a view onto the DS arrays (index may lie past the live ones). */
+class Bunker {
+  constructor(ds, i) { this.ds = ds; this.o = i * 2; }
+  get cell() { return this.ds.u16(BUNKER.CELL + this.o); }
+  get base() { return this.ds.u8(BUNKER.BASE + this.o); }
+  get spawnCell() { return this.ds.u16(BUNKER.SPAWN + this.o); }
+  get pads() { return [BUNKER.SPAWN, BUNKER.PAD2, BUNKER.PAD3, BUNKER.PAD4].map((a) => this.ds.u16(a + this.o)); }
+  get health() { return this.ds.u16(BUNKER.HEALTH + this.o); }
+  set health(v) { this.ds.w16(BUNKER.HEALTH + this.o, v); }
+  get cooldown() { return this.ds.u16(BUNKER.COOL + this.o); }
+  set cooldown(v) { this.ds.w16(BUNKER.COOL + this.o, v); }
+}
+
 export class Terrain {
   constructor(data) {
     this.data = data;
+    this.ds = data.exe.ds;
     this.map = new Uint8Array(0x2000);
-    this.bunkers = [];
     this.pyramids = [];
     this.bunkersLeft = 0;     // [0x2320]
     this.pyramidsLeft = 0;    // [0x3880]
@@ -35,24 +64,36 @@ export class Terrain {
     this.setupPyramids(layout.pyramids, stats);
   }
 
+  /** [0x231E] bunkers placed this round */
+  get bunkerCount() { return this.ds.u16(BUNKER.COUNT); }
+  /** bunker slot i (not limited to the live ones) */
+  bunker(i) { return new Bunker(this.ds, i); }
+  /** the live bunkers */
+  get bunkers() { return Array.from({ length: this.bunkerCount }, (_, i) => this.bunker(i)); }
+
   /** sub_201E */
   setupBunkers(cells) {
-    const m = this.map;
-    this.bunkers = [];
+    const m = this.map, ds = this.ds;
+    ds.w16(BUNKER.COUNT, cells.length);
     this.bunkersLeft = cells.length;
-    for (const c of cells) {
+    cells.forEach((c, i) => ds.w16(BUNKER.CELL + i * 2, c));
+    cells.forEach((c, i) => {
+      const o = i * 2;
       const base = m[A + c] & 0xf0;
+      ds.w8(BUNKER.BASE + o, base);
       const raised = u8(base + 0x70);
       for (const d of [0, -1, -0x40, -0x41]) m[A + ((c + d) & 0xfff)] = raised;
       const set = (cell, v) => { m[B + (cell & 0xfff)] = v; };
-      let bx = c - 0x40;
-      const spawnCell = bx & 0xfff;
+      let bx = (c - 0x40) & 0xffff;
+      ds.w16(BUNKER.SPAWN + o, bx);
       set(bx - 1, 0xc0); set(bx, 0x70); set(bx + 1, 0xc0);
-      bx += 0x3f; const pad2 = bx & 0xfff; set(bx, 0x70); set(bx + 1, 0xc0);
-      bx += 2; const pad3 = bx & 0xfff; set(bx, 0x70);
-      bx += 0x3f; const pad4 = bx & 0xfff; set(bx - 1, 0xc0); set(bx, 0x70); set(bx + 1, 0xc0);
-      this.bunkers.push({ cell: c, base, spawnCell, pads: [spawnCell, pad2, pad3, pad4], health: 5, cooldown: 0, sunk: false });
-    }
+      bx += 0x3f; ds.w16(BUNKER.PAD2 + o, bx); set(bx, 0x70); set(bx + 1, 0xc0);
+      bx += 2; ds.w16(BUNKER.PAD3 + o, bx); set(bx, 0x70);
+      bx += 0x3f; ds.w16(BUNKER.PAD4 + o, bx); set(bx - 1, 0xc0); set(bx, 0x70); set(bx + 1, 0xc0);
+      ds.w16(BUNKER.COOL + o, 0);
+      ds.w16(0x2306 + o, 0);
+      ds.w16(BUNKER.HEALTH + o, 5);
+    });
   }
 
   /** sub_20C2 */
@@ -78,13 +119,13 @@ export class Terrain {
 
   /** bunker index owning a pad cell, or -1 (search at 0x3E9) */
   bunkerAtCell(cell) {
-    for (let i = 0; i < this.bunkers.length; i++) if (this.bunkers[i].pads.includes(cell)) return i;
+    for (let i = 0; i < this.bunkerCount; i++) if (this.bunker(i).pads.includes(cell)) return i;
     return -1;
   }
 
   /** 0x0410: a shot lands on a bunker pad. */
   damageBunker(i, dmg, onDestroyed) {
-    const b = this.bunkers[i];
+    const b = this.bunker(i);
     const hp = s8((b.health & 0xff) - dmg);
     b.health = (b.health & 0xff00) | (hp & 0xff);
     if (hp > 0) return;
@@ -97,7 +138,8 @@ export class Terrain {
   /** sub_06AF: destroyed bunkers sink back into the ground. */
   sinkBunkers() {
     const m = this.map;
-    for (const b of this.bunkers) {
+    for (let i = 0; i < this.bunkerCount; i++) {
+      const b = this.bunker(i);
       if (b.health === 0) {
         const di = b.spawnCell;
         const al = u8(m[A + di] - 4);

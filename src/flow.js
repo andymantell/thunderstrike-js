@@ -28,6 +28,7 @@ export class Flow {
     this.hud = new Hud(app.data);
     this.display = new Display(app);
     this.arena = new Arena(app.data, app.speaker);
+    this.arena.onControllerReset = () => app.controls.reset();
     this.craftSlot = 0;            // [0x4286] = slot * 2
     this.firstIntro = true;        // [0xAE0C]
     this.pauseToggle = 0x80;       // toggle bit for F10 (DS:0x9ED0)
@@ -169,7 +170,8 @@ export class Flow {
       yield () => app.frameTicks >= 5;
       app.frameTicks = 0;
       if (this.kb.take(SC_F4) && !g.roundOver) yield* this.statsOverlay();   // 11ee
-      if (this.checkCheat()) { g.nextRound(); yield* this.roundIntro(); this.applyArenaLook(); app.frameTicks = 0; continue; } // 2927 -> 29a0
+      // 2927 jumps to 29a0 and returns into this frame, which then carries on as normal
+      if (this.checkCheat()) { g.nextRound(); yield* this.roundIntro(); this.applyArenaLook(); }
       app.controls.read(g.input);
       g.input.refuel = this.kb.held(0x43);
       const ev = g.step();

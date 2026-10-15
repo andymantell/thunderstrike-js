@@ -114,6 +114,7 @@ export class Arena {
     this.arena = Math.floor(this.round / 10);
     this.writeRoundText();
     this.msg.post(0x16, 0x0fcb, 0xffff);
+    this.onControllerReset?.();         // call [0x9FFC]: centre the controls
     this.resetPlayerSoft();             // 2a5e
     this.loadRoundTables();             // 2aa3
     this.terrain.loadRound(this.round, this.stats);  // 1ed9 + 1e69
@@ -722,24 +723,28 @@ export class Arena {
       this.waveIndex++;
       return;
     }
+    // 30D5: walk the bunker arrays. sub_066D (free slot) leaves CX = slots
+    // left to search, and that becomes this loop's counter, so the walk is
+    // not limited to the live bunkers and can launch from stale entries.
     const t = this.terrain;
-    let b = 0, s = -1;
-    const n = t.bunkers.length;
-    let i = 0;
-    let recheck = true;
-    while (i < n) {
-      if (recheck) {
-        if (this.enemies >= this.maxEnemies) return;
-        s = this.freeSlotBelow(SLOTS - 8);
-        if (s < 0) return;
-      }
-      const bk = t.bunkers[b];
-      if (s16(bk.health) <= 0 || bk.cooldown) {
-        b++; i++; recheck = false; continue;
+    let b = 0, cx = 0;
+    for (;;) {
+      if (this.enemies >= this.maxEnemies) return;
+      const s = this.freeSlotBelow(SLOTS - 8);
+      if (s < 0) return;
+      cx = SLOTS - 8 - s;
+      for (;;) {
+        const bk = t.bunker(b);
+        if (s16(bk.health) > 0 && !bk.cooldown) break;
+        b++;
+        cx = (cx - 1) & 0xffff;
+        if (cx === 0) return;
       }
       this.launch(b, s);
       if (--this.waveRemaining === 0) { this.waveDelay = this.waveInterval; return; }
-      b++; i++; recheck = true;
+      b++;
+      cx = (cx - 1) & 0xffff;
+      if (cx === 0) return;
     }
   }
 
@@ -752,8 +757,9 @@ export class Arena {
   /** sub_3125 */
   launch(b, s) {
     const o = this.o, t = this.terrain;
-    t.bunkers[b].cooldown = 0x14;
-    let ax = (t.bunkers[b].spawnCell << 2) & 0xffff;
+    const bk = t.bunker(b);
+    bk.cooldown = 0x14;
+    let ax = (bk.spawnCell << 2) & 0xffff;
     ax = (ax & 0xff) | ((((ax >> 8) << 2) & 0xff) << 8);
     o.x[s] = u16(((ax & 0xff) << 8) - 0x200);
     o.y[s] = 0x118;
