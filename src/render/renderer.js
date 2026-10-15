@@ -126,15 +126,20 @@ export class Renderer {
     this.hdPos = new Float32Array(MAX_HD * 3);
     this.hdCi = new Float32Array(MAX_HD);
     this.hdDisc = new Float32Array(MAX_HD * 3);
+    this.hdLayer = new Float32Array(MAX_HD);
     geo.setAttribute('position', new THREE.BufferAttribute(this.hdPos, 3).setUsage(THREE.DynamicDrawUsage));
     geo.setAttribute('ci', new THREE.BufferAttribute(this.hdCi, 1).setUsage(THREE.DynamicDrawUsage));
     geo.setAttribute('disc', new THREE.BufferAttribute(this.hdDisc, 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute('layer', new THREE.BufferAttribute(this.hdLayer, 1).setUsage(THREE.DynamicDrawUsage));
     this.hdGeo = geo;
-    // a depth buffer replaces the original's painter's order; far land fades into the ground colour
+    // a depth buffer replaces the original's painter's order; far land fades into the ground colour.
+    // Within an object, each face's draw order ('layer') moves it a hair towards the eye (scaling about the
+    // eye leaves it where it is on screen), so coplanar faces resolve as the original's painting does.
     this.hdMat = new THREE.ShaderMaterial({
       uniforms: { palette: { value: this.palette }, ground: { value: 0 }, fogNear: { value: 3600 }, fogFar: { value: 5800 } },
-      vertexShader: `attribute float ci; attribute vec3 disc; varying float vCi; varying vec3 vDisc; varying float vDist;
+      vertexShader: `attribute float ci, layer; attribute vec3 disc; varying float vCi; varying vec3 vDisc; varying float vDist;
         void main(){ vCi = ci; vDisc = disc; vec4 v = modelViewMatrix * vec4(position, 1.0); vDist = length(v.xz);
+          v.xyz *= 1.0 - layer * 5e-5;
           gl_Position = projectionMatrix * v; }`,
       fragmentShader: `uniform sampler2D palette; uniform float ground, fogNear, fogFar;
         varying float vCi; varying vec3 vDisc; varying float vDist;
@@ -155,8 +160,9 @@ export class Renderer {
     this.hdBg.uniforms.ground.value = groundColour;
     this.hdMat.uniforms.ground.value = groundColour;
     let n = 0;
-    const put = (x, y, z, c, dx = 0, dy = 0, d = 0) => {
+    const put = (x, y, z, c, dx = 0, dy = 0, d = 0, layer = 0) => {
       if (n >= MAX_HD) return;
+      this.hdLayer[n] = layer;
       this.hdPos[n * 3] = x; this.hdPos[n * 3 + 1] = y; this.hdPos[n * 3 + 2] = -z;
       this.hdCi[n] = c;
       this.hdDisc[n * 3] = dx; this.hdDisc[n * 3 + 1] = dy; this.hdDisc[n * 3 + 2] = d;
@@ -166,9 +172,9 @@ export class Renderer {
       if (p.kind === 'poly') {
         const pts = p.pts;
         for (let i = 1; i + 1 < pts.length; i++) {
-          put(pts[0][0], pts[0][1], pts[0][2], p.colour);
-          put(pts[i][0], pts[i][1], pts[i][2], p.colour);
-          put(pts[i + 1][0], pts[i + 1][1], pts[i + 1][2], p.colour);
+          put(pts[0][0], pts[0][1], pts[0][2], p.colour, 0, 0, 0, p.layer ?? 0);
+          put(pts[i][0], pts[i][1], pts[i][2], p.colour, 0, 0, 0, p.layer ?? 0);
+          put(pts[i + 1][0], pts[i + 1][1], pts[i + 1][2], p.colour, 0, 0, 0, p.layer ?? 0);
         }
       } else if (p.kind === 'disc') {
         const { x, y, z, r, colour } = p;
@@ -177,7 +183,7 @@ export class Renderer {
       }
     }
     this.hdGeo.setDrawRange(0, n);
-    for (const k of ['position', 'ci', 'disc']) this.hdGeo.attributes[k].needsUpdate = true;
+    for (const k of ['position', 'ci', 'disc', 'layer']) this.hdGeo.attributes[k].needsUpdate = true;
     this.hdDirty = true;
   }
 

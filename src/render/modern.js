@@ -112,6 +112,7 @@ export class ModernSceneBuilder extends SceneBuilder {
       if (i < m.positionCount) { vx[i] = x2 + px; vy[i] = y2 + py; vz[i] = z2 + pz; }
       else { vx[i] = x2; vy[i] = y2; vz[i] = z2; }
     }
+    let layer = 0;
     for (const f of m.faces) {
       if (f.idx.length < 3) continue;
       const nv = f.normal;
@@ -119,7 +120,8 @@ export class ModernSceneBuilder extends SceneBuilder {
       if (sh < -8) sh = -8;
       const colour = ((f.colour & 0xf0) + sh + 8) & 0xff;
       if (!facing(vx, vy, vz, f.idx)) continue;
-      prims.push({ kind: 'poly', colour: this.glow(colour, g), pts: f.idx.map((i) => [vx[i], vy[i], vz[i]]) });
+      // the original paints faces in model order, so a later face sharing a plane (an exhaust on the hull) wins
+      prims.push({ kind: 'poly', colour: this.glow(colour, g), layer: ++layer, pts: f.idx.map((i) => [vx[i], vy[i], vz[i]]) });
     }
   }
 }
