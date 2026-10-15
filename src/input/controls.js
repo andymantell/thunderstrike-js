@@ -40,7 +40,11 @@ export class Controls {
     return { x: Math.min(m.x | 0, 0xf0), y: Math.min(m.y | 0, 0x70), buttons: this.mouseButtons() & 3 };
   }
 
-  reset() { this.x = 0x80; this.y = 0x80; this.turnRate = 0; }
+  /** [0x9FFC]: sub_7F29 centres the keyboard axes; sub_7C7F puts the mouse back at (0x80, 0x80). */
+  reset() {
+    this.x = 0x80; this.y = 0x80; this.turnRate = 0;
+    if (this.mode === 'mouse') { this.mouse.x = 0x80; this.mouse.y = 0x80; }
+  }
 
   /** Called once per game frame (the original reads controls at the start of the player update). */
   read(input) {

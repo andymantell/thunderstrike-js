@@ -522,6 +522,7 @@ export class Arena {
       if (u16(o.y[s] - py + 0x50) > 0xa0) continue;
       if (u16(o.z[s] - pz + 0x140) >= 0x280) continue;
       this.touch(s);
+      return;            // the handler's ret leaves sub_014D: one contact per frame
     }
   }
 
@@ -650,7 +651,8 @@ export class Arena {
   /** sub_0465: dispatch table DS:0x1604 */
   shotHits(d, s) {
     const o = this.o, t = o.type[s];
-    if (t >= 0x40) return;                         // 05b9: shots pass through pods
+    // DS:0x1604 sends explosions (0554) and pods (05B9) to a bare return: the shot passes through
+    if ((t >= 0x08 && t <= 0x0f) || t >= 0x40) return;
     let kill;
     if (t === T.FIGHTER || t === T.GLIDER || t === T.MINER) kill = this.wound(s, d);
     else if (t === T.SABOTEUR) { kill = this.wound(s, d); if (kill) this.releasePyramid(s); }
